@@ -207,20 +207,17 @@ export default function MatchPage() {
                         {teacher.tagline}
                       </p>
                       <p>{teacher.summary}</p>
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        <Badge
-                          variant="secondary"
-                          className="rounded-full text-xs"
+                      <Button asChild variant="outline" size="sm" className="mt-3 w-full">
+                        <Link
+                          href={
+                            studentId
+                              ? `/learn/${teacher.teacher_id}?studentId=${studentId}`
+                              : `/learn/${teacher.teacher_id}`
+                          }
                         >
-                          Best: {teacher.why.best.join(", ")}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className="rounded-full text-xs"
-                        >
-                          Worst: {teacher.why.worst.join(", ")}
-                        </Badge>
-                      </div>
+                          Learn more
+                        </Link>
+                      </Button>
                     </CardContent>
                   </CardSpotlight>
                   {swipeOverlay?.teacherId === teacher.teacher_id && (

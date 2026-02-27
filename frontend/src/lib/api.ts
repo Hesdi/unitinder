@@ -34,6 +34,50 @@ export async function matchTeachers(body: {
   return res.json();
 }
 
+export async function getTeacher(teacherId: string): Promise<Teacher> {
+  const res = await fetch(`${API_URL}/api/teachers/${encodeURIComponent(teacherId)}`);
+  if (!res.ok) throw new Error("Failed to fetch teacher");
+  return res.json();
+}
+
+export async function getModalityPrompts(teacherId: string): Promise<{
+  text_prompt: string;
+  audio_prompt: string;
+  video_prompt: string;
+}> {
+  const res = await fetch(`${API_URL}/api/learn/prompts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teacherId }),
+  });
+  if (!res.ok) throw new Error("Failed to get prompts");
+  return res.json();
+}
+
+export async function createStudyPlan(
+  teacherId: string,
+  studentPersona: Record<string, number>,
+  topic: string
+): Promise<{ study_plan: string; text_prompt: string }> {
+  const res = await fetch(`${API_URL}/api/learn/study-plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teacherId, studentPersona, topic }),
+  });
+  if (!res.ok) throw new Error("Failed to create study plan");
+  return res.json();
+}
+
+export interface Teacher {
+  teacher_id: string;
+  name: string;
+  subject: string;
+  archetype: string;
+  tagline: string;
+  summary: string;
+  persona: Record<string, number>;
+}
+
 export interface Student {
   student_id: string;
   name: string;
