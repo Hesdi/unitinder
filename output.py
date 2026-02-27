@@ -1,3 +1,4 @@
+import os
 from openai import OpenAI
 
 data = {
@@ -48,17 +49,30 @@ completion = client.chat.completions.create(
     model=deployment_name,
     messages=[
         {
+            "role": "system",
+            "content": "You are an expert Prompt Engineer for an AI education platform."
+        },
+        {
             "role": "user",
-            "content": """Based on the given teacher's personality, generate prompts for 3 modalities: audio, video, and text.
-            
-            Text format:
-            Study plan: Given (student, teacher, subject, user prompt), generate a text plan “in that teacher’s style” (template + teacher persona fields). You can use a simple template or call an LLM API.  
-            
-            Video/audio: Only generate the prompt text (e.g. for a future TTS/video model) and show it in the UI; no actual audio/video generation.
-            
-            Teacher Data: {data}""",
+            "content": f"""Based on the following Teacher Persona, your task is to generate 3 specific system prompts tailored to three different instructional modalities: Text, Audio, and Video.
+
+We are building a system where a student requests a study plan or lesson, and we use these prompts to generate the content in the teacher's exact style.
+
+1. Text Modality Prompt:
+Create a system prompt that will instruct an LLM to generate a personalized "Study Plan" or written lesson. It should enforce the teacher's specific pacing, structure, verbosity, and textual pedagogical style (e.g., Socratic questioning, formal vs. casual).
+
+2. Audio Modality Prompt:
+Create a system prompt that will instruct an LLM to write a script for a TTS (Text-to-Speech) engine. It should emphasize auditory elements: speech patterns, tone of voice, enthusiasm, pauses, and rhetorical questions, ensuring the script sounds natural and fits the teacher's emotional sensitivity and humor receptivity.
+
+3. Video Modality Prompt:
+Create a system prompt that will instruct an LLM to generate a script and visual cues for a Video/Avatar model. It must include instructions for the teacher's body language, facial expressions, visual dependency (e.g., describing props or whiteboard use), and overall on-screen energy.
+
+INPUT DATA (Teacher Persona):
+{data}
+
+Please format your response clearly, providing the complete prompt text for each of the 3 modalities."""
         }
     ],
 )
 
-print(completion.choices[0].message)
+print(completion.choices[0].message.content)
