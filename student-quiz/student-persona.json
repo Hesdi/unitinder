@@ -1,0 +1,33 @@
+{
+  "student_id": "stu_ca841a2a",
+  "name": "TestUser",
+  "generated_at": "2026-02-27T19:45:38.097Z",
+  "persona": {
+    "pace": 0.53,
+    "structure": 0.16,
+    "abstraction": 0.53,
+    "interactivity": 0.37,
+    "visual_dependency": 0.3,
+    "verbal_density": 0.1,
+    "repetition_need": 0.5,
+    "formality": 0.8,
+    "humor_receptivity": 0.1,
+    "feedback_style": 0.1,
+    "autonomy": 0.5,
+    "cognitive_load_tolerance": 0.43,
+    "attention_span": 0.1,
+    "motivation_type": 0.1,
+    "error_tolerance": 0.15,
+    "social_preference": 0.13,
+    "real_world_need": 0.65,
+    "emotional_sensitivity": 0.53,
+    "question_comfort": 0.2,
+    "note_taking_style": 0.4,
+    "challenge_preference": 0.1,
+    "context_need": 0.9,
+    "storytelling_affinity": 0.9,
+    "revision_style": 0.2
+  },
+  "archetype": "Learner profile",
+  "summary": "Strong on: context_need, storytelling_affinity, formality. Lower on: motivation_type, challenge_preference. Profile generated from 20-question quiz — use for teacher matching."
+}
