@@ -1,5 +1,7 @@
 import os
+import json
 from openai import OpenAI
+from dotenv import load_dotenv
 
 data = {
   "teacher_id": "tch_kovacs",
@@ -38,6 +40,7 @@ endpoint = "https://hesdi-mm4zauz8-eastus2.cognitiveservices.azure.com/openai/v1
 model_name = "gpt-5.2-chat"
 deployment_name = "gpt-5.2-chat"
 
+load_dotenv(override=True)
 api_key = os.getenv("OPENAI_API_KEY")
 
 client = OpenAI(
@@ -45,12 +48,16 @@ client = OpenAI(
     api_key=api_key
 )
 
+with open("student-quiz/student-persona.json", "r", encoding="utf-8") as f:
+    student_data = json.load(f)
+
 completion = client.chat.completions.create(
     model=deployment_name,
+    response_format={ "type": "json_object" },
     messages=[
         {
             "role": "system",
-            "content": "You are an expert Prompt Engineer for an AI education platform."
+            "content": "You are an expert Prompt Engineer for an AI education platform. Output your response as a valid JSON object."
         },
         {
             "role": "user",
@@ -70,9 +77,44 @@ Create a system prompt that will instruct an LLM to generate a script and visual
 INPUT DATA (Teacher Persona):
 {data}
 
-Please format your response clearly, providing the complete prompt text for each of the 3 modalities."""
+OUTPUT FORMAT:
+Return exactly a JSON object with the following keys:
+"text_prompt": <the complete prompt for text modality>,
+"audio_prompt": <the complete prompt for audio modality>,
+"video_prompt": <the complete prompt for video modality>"""
         }
     ],
 )
 
-print(completion.choices[0].message.content)
+generated_prompts = json.loads(completion.choices[0].message.content)
+text_system_prompt = generated_prompts.get("text_prompt", "")
+
+print("--- GENERATED TEXT SYSTEM PROMPT ---")
+print(text_system_prompt)
+print("\\n" + "="*60 + "\\n")
+
+# Step 2: Generate actual text modality (Study Plan) using the generated system prompt
+
+topic_request = "I would like a study plan for understanding Cellular Respiration."
+
+plan_completion = client.chat.completions.create(
+    model=deployment_name,
+    messages=[
+        {
+            "role": "system",
+            "content": text_system_prompt
+        },
+        {
+            "role": "user",
+            "content": f"""Student Persona Details:
+{json.dumps(student_data, indent=2)}
+
+Topic requested: {topic_request}
+
+Please generate the study plan for this student based on your defined teacher instructions. Ensure your response is highly tailored to the student's persona while adhering strictly to your own pedagogical style."""
+        }
+    ],
+)
+
+print("--- GENERATED STUDY PLAN ---")
+print(plan_completion.choices[0].message.content)
