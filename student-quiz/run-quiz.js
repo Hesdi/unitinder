@@ -140,6 +140,21 @@ async function runQuiz() {
     console.log('\n  Written to:', outPath);
   }
 
+  const appendToStudents = process.argv.includes('--save') || process.argv.includes('--append');
+  if (appendToStudents) {
+    const fs = require('fs');
+    const path = require('path');
+    const studentsPath = path.join(__dirname, '..', 'students.json');
+    let data = { _schema_notes: '', students: [] };
+    if (fs.existsSync(studentsPath)) {
+      data = JSON.parse(fs.readFileSync(studentsPath, 'utf8'));
+    }
+    if (!Array.isArray(data.students)) data.students = [];
+    data.students.push(output);
+    fs.writeFileSync(studentsPath, JSON.stringify(data, null, 2), 'utf8');
+    console.log('\n  Appended to:', studentsPath);
+  }
+
   rl.close();
 }
 
