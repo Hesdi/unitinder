@@ -2,10 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import { QUESTIONS } from "@/data/questions";
 import { DIMENSION_KEYS } from "@/data/questions";
 import { aggregatePersona, deriveArchetypeAndSummary } from "@/lib/quiz";
@@ -69,14 +72,24 @@ export default function QuizPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-6 py-4">
+      <header className="border-b border-border px-4 py-4 sm:px-6">
         <Link href="/" className="text-xl font-semibold">
           Unitinder
         </Link>
-        <span className="ml-4 text-muted-foreground">Quiz</span>
+        <Badge variant="secondary" className="ml-3 rounded-full">
+          Quiz
+        </Badge>
       </header>
-      <main className="mx-auto max-w-2xl px-6 py-8">
-        {step === "name" && (
+      <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
+        <AnimatePresence mode="wait">
+          {step === "name" && (
+          <motion.div
+            key="name"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+          >
           <Card>
             <CardHeader>
               <CardTitle>Student learning profile</CardTitle>
@@ -95,16 +108,34 @@ export default function QuizPage() {
                   className="mt-1 max-w-xs"
                 />
               </div>
-              <Button onClick={handleStart}>Start quiz</Button>
+              <Button
+                onClick={handleStart}
+                className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
+              >
+                Start quiz
+              </Button>
             </CardContent>
           </Card>
-        )}
+          </motion.div>
+          )}
 
-        {step === "questions" && (
-          <div className="space-y-8">
-            <p className="text-muted-foreground text-sm">
-              Question {answeredCount} of {QUESTIONS.length}
-            </p>
+          {step === "questions" && (
+          <motion.div
+            key="questions"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-8"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Badge variant="outline" className="rounded-full">
+                  Question {answeredCount} of {QUESTIONS.length}
+                </Badge>
+              </div>
+              <Progress value={(answeredCount / QUESTIONS.length) * 100} className="h-2" />
+            </div>
             {QUESTIONS.map((q) => (
               <Card key={q.id}>
                 <CardHeader>
@@ -128,26 +159,43 @@ export default function QuizPage() {
               </Card>
             ))}
             {error && <p className="text-destructive text-sm">{error}</p>}
-            <div className="flex gap-4">
-              <Button onClick={handleSubmit} disabled={!allAnswered}>
+            <div className="flex flex-col gap-4 sm:flex-row">
+              <Button
+                onClick={handleSubmit}
+                disabled={!allAnswered}
+                className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
+              >
                 Submit and save to students
               </Button>
               <Button variant="outline" asChild>
                 <Link href="/">Cancel</Link>
               </Button>
             </div>
-          </div>
-        )}
+          </motion.div>
+          )}
 
-        {step === "saving" && (
-          <Card>
-            <CardContent className="py-8 text-center text-muted-foreground">
-              Saving your profile…
-            </CardContent>
-          </Card>
-        )}
+          {step === "saving" && (
+          <motion.div
+            key="saving"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                Saving your profile…
+              </CardContent>
+            </Card>
+          </motion.div>
+          )}
 
-        {step === "done" && (
+          {step === "done" && (
+          <motion.div
+            key="done"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+          >
           <Card>
             <CardHeader>
               <CardTitle>Profile saved</CardTitle>
@@ -156,14 +204,24 @@ export default function QuizPage() {
               </p>
             </CardHeader>
             <CardContent>
-              <Button asChild>
+              <Button
+                asChild
+                className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
+              >
                 <Link href="/match">Match with teachers</Link>
               </Button>
             </CardContent>
           </Card>
-        )}
+          </motion.div>
+          )}
 
-        {step === "error" && (
+          {step === "error" && (
+          <motion.div
+            key="error"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+          >
           <Card>
             <CardHeader>
               <CardTitle>Something went wrong</CardTitle>
@@ -178,7 +236,9 @@ export default function QuizPage() {
               </Button>
             </CardContent>
           </Card>
-        )}
+          </motion.div>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );
