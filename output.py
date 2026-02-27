@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 data = {
   "teacher_id": "tch_kovacs",
   "name": "Ms. Kovács",
-  "subject": "Biology",
+  "subject": "Analysis",
   "archetype": "The Socratic Guide",
   "persona": {
     "pace": 0.40,

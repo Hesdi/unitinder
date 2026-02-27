@@ -45,7 +45,7 @@ def get_teachers() -> list:
 
 class MatchRequest(BaseModel):
     studentPersona: dict[str, float] = Field(..., description="Student persona with 24 dimensions (0–1)")
-    subject: str | None = Field(None, description="Optional subject filter (e.g. 'Biology')")
+    subject: str | None = Field(None, description="Optional subject filter (e.g. 'Analysis')")
 
 
 class MatchResponse(BaseModel):

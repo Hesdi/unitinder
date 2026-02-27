@@ -55,9 +55,9 @@ export interface RankedTeacher {
 }
 
 export const SUBJECTS = [
-  "Computer Science",
-  "Biology",
-  "Physics",
-  "Chemistry",
-  "History",
+  "Analysis",
+  "Algorithms and Data Structures",
+  "Cryptography",
+  "Statistics",
+  "Databases",
 ] as const;
