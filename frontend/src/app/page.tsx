@@ -15,31 +15,51 @@ export default function Home() {
           </Link>
         </header>
         <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-4 py-12 sm:px-6 sm:py-16">
-        <div className="relative overflow-hidden rounded-2xl py-4">
-          <Spotlight
-            className="-top-40 left-0 md:-top-20 md:left-60"
-            fill="var(--gradient-lavender)"
-          />
-          <h1 className="relative mb-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-            Find teachers that match how you learn
-          </h1>
-        </div>
-        <p className="mb-10 text-muted-foreground sm:mb-12">
-          Take a short quiz to build your learning profile, then see your
-          best-matched teachers by subject.
-        </p>
-        <div className="flex flex-col gap-4 sm:flex-row">
-          <Button
-            asChild
-            size="lg"
-            className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
-          >
-            <Link href="/quiz">Take the quiz</Link>
-          </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link href="/match">Match with teachers</Link>
-          </Button>
-        </div>
+          <div className="relative overflow-hidden rounded-2xl py-4">
+            <Spotlight
+              className="-top-40 left-0 md:-top-20 md:left-60"
+              fill="var(--gradient-lavender)"
+            />
+            <h1 className="relative mb-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+              Find teachers that match how you learn
+            </h1>
+          </div>
+          <p className="mb-10 text-muted-foreground sm:mb-12">
+            Choose your role to get started with personalized teacher-student matching.
+          </p>
+          
+          <div className="grid gap-6 sm:grid-cols-2">
+            {/* Student Role */}
+            <div className="flex flex-col rounded-lg border border-border bg-card p-6 transition-all hover:border-[var(--gradient-coral)] hover:shadow-lg">
+              <h2 className="mb-2 text-xl font-semibold">Student</h2>
+              <p className="mb-4 flex-1 text-sm text-muted-foreground">
+                Take a cognitive assessment quiz, upload learning material, and discover teachers perfectly matched to your learning style.
+              </p>
+              <Button
+                asChild
+                size="lg"
+                className="w-full bg-[var(--gradient-coral)] text-white hover:opacity-90"
+              >
+                <Link href="/quiz">Start as Student</Link>
+              </Button>
+            </div>
+
+            {/* Teacher Role */}
+            <div className="flex flex-col rounded-lg border border-border bg-card p-6 transition-all hover:border-[var(--gradient-lavender)] hover:shadow-lg">
+              <h2 className="mb-2 text-xl font-semibold">Teacher</h2>
+              <p className="mb-4 flex-1 text-sm text-muted-foreground">
+                Upload your teaching video to generate your profile, view match analytics, and connect with compatible students.
+              </p>
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="w-full hover:bg-[var(--gradient-lavender)] hover:text-white"
+              >
+                <Link href="/teacher/dashboard">Start as Teacher</Link>
+              </Button>
+            </div>
+          </div>
         </main>
       </div>
     </AuroraBackground>
