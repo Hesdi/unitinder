@@ -194,14 +194,14 @@ export default function FlashcardGamePage() {
       // Show analyzing phase
       setPhase('analyzing');
       
-      // Navigate to teachers page after 2 seconds
+      // Navigate to match-with-teachers page after 2 seconds
       setTimeout(() => {
-        router.push('/teachers');
+        router.push('/match');
       }, 2000);
     } catch (error) {
       console.error('Error completing flashcard game:', error);
       // Navigate anyway
-      router.push('/teachers');
+      router.push('/match');
     }
   };
 
