@@ -12,6 +12,8 @@ import {
   matchTeachers,
   addLikedTeacher,
   SUBJECTS,
+  isBackendConfigured,
+  BACKEND_NOT_CONFIGURED_MESSAGE,
   type RankedTeacher,
 } from "@/lib/api";
 import { getCurrentStudent } from "@/lib/current-student";
@@ -44,9 +46,12 @@ export default function MatchPage() {
       setRanked(data.ranked);
       setRemainingTeachers(data.ranked);
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Failed to match. Is the API running?"
-      );
+      const msg = !isBackendConfigured()
+        ? BACKEND_NOT_CONFIGURED_MESSAGE
+        : e instanceof Error
+          ? e.message
+          : "Failed to match. Is the API running?";
+      setError(msg);
     } finally {
       setMatching(false);
     }
@@ -102,7 +107,9 @@ export default function MatchPage() {
         <h1 className="mb-6 text-2xl font-semibold">Match with teachers</h1>
 
         {error && (
-          <p className="text-destructive mb-4 text-sm">{error}</p>
+          <p className="text-destructive mb-4 text-sm">
+            {!isBackendConfigured() ? BACKEND_NOT_CONFIGURED_MESSAGE : error}
+          </p>
         )}
 
         {noStudent && (
@@ -127,7 +134,16 @@ export default function MatchPage() {
           </Card>
         )}
 
-        {student && !showSwipeStack && (
+        {student && !showSwipeStack && !isBackendConfigured() && (
+          <Card className="mb-6">
+            <CardContent className="py-6">
+              <p className="font-medium text-foreground">No teacher data available</p>
+              <p className="mt-1 text-sm text-muted-foreground">{BACKEND_NOT_CONFIGURED_MESSAGE}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {student && !showSwipeStack && isBackendConfigured() && (
           <div className="space-y-6">
             <Card>
               <CardHeader>

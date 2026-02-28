@@ -1,0 +1,17 @@
+# Render Blueprint: deploy the FastAPI backend as a Web Service.
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: unitinder-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: UNITINDER_DISABLE_AI_SUMMARY
+        value: "0"
+      - key: OPENAI_BASE_URL
+        sync: false
+      - key: OPENAI_MODEL
+        sync: false

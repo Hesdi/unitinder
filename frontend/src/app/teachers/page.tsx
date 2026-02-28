@@ -57,7 +57,7 @@ export default function TeachersPage() {
           <p className="text-muted-foreground">Loading teachers…</p>
         )}
 
-        {!loading && teachers.length === 0 && (
+        {!loading && teachers.length === 0 && !error && (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
               No teachers in the system yet.

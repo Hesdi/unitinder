@@ -1,5 +1,24 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8765";
 
+/** True if the app is running in the browser on a non-localhost host but API still points to localhost (backend not configured for production). */
+export function isBackendConfigured(): boolean {
+  if (typeof window === "undefined") return true;
+  if (window.location.hostname === "localhost") return true;
+  return !API_URL.includes("localhost");
+}
+
+export const BACKEND_NOT_CONFIGURED_MESSAGE =
+  "No teacher data available. Deploy the FastAPI backend (e.g. Railway or Render), then set NEXT_PUBLIC_API_URL in Vercel to your backend URL.";
+
+/** When no backend is configured, teachers are loaded from frontend/public/teachers.json */
+async function getStaticTeachers(): Promise<Teacher[]> {
+  const base = typeof window !== "undefined" ? "" : "http://localhost:3000";
+  const res = await fetch(`${base}/teachers.json`);
+  if (!res.ok) throw new Error("Failed to load teachers");
+  const data = (await res.json()) as { teachers?: Teacher[] };
+  return data.teachers ?? [];
+}
+
 export async function getStudents(): Promise<{ students: Student[] }> {
   const res = await fetch(`${API_URL}/api/students`);
   if (!res.ok) throw new Error("Failed to fetch students");
@@ -35,12 +54,22 @@ export async function matchTeachers(body: {
 }
 
 export async function getTeachers(): Promise<{ teachers: Teacher[] }> {
+  if (!isBackendConfigured()) {
+    const teachers = await getStaticTeachers();
+    return { teachers };
+  }
   const res = await fetch(`${API_URL}/api/teachers`);
   if (!res.ok) throw new Error("Failed to fetch teachers");
   return res.json();
 }
 
 export async function getTeacher(teacherId: string): Promise<Teacher> {
+  if (!isBackendConfigured()) {
+    const teachers = await getStaticTeachers();
+    const teacher = teachers.find((t) => (t.teacher_id || "").trim() === (teacherId || "").trim());
+    if (!teacher) throw new Error("Failed to fetch teacher");
+    return teacher;
+  }
   const res = await fetch(`${API_URL}/api/teachers/${encodeURIComponent(teacherId)}`);
   if (!res.ok) throw new Error("Failed to fetch teacher");
   return res.json();
