@@ -147,6 +147,15 @@ export interface Student {
   persona: Record<string, number>;
   archetype: string;
   summary: string;
+  cognitiveTag?: 'Visual-Dominant' | 'Sequential-Dominant' | 'Spatial-Dominant';
+  flashcardResult?: {
+    totalQuestions: number;
+    colorCorrect: number;
+    numberCorrect: number;
+    shapeCorrect: number;
+    cognitiveTag: 'Visual-Dominant' | 'Sequential-Dominant' | 'Spatial-Dominant';
+    completedAt: string;
+  };
 }
 
 export interface RankedTeacher {

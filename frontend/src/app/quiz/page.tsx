@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { QUESTIONS } from "@/data/questions";
+import { QUIZ_QUESTIONS } from "@/data/questions";
 import { DIMENSION_KEYS } from "@/data/questions";
 import { aggregatePersona, deriveArchetypeAndSummary } from "@/lib/quiz";
 import { createStudent } from "@/lib/api";
@@ -31,8 +31,8 @@ export default function QuizPage() {
 
   const handleSubmit = async () => {
     const answered = Object.keys(answers).length;
-    if (answered !== QUESTIONS.length) {
-      setError(`Please answer all ${QUESTIONS.length} questions. You have ${answered}.`);
+    if (answered !== QUIZ_QUESTIONS.length) {
+      setError(`Please answer all ${QUIZ_QUESTIONS.length} questions. You have ${answered}.`);
       return;
     }
     setError("");
@@ -41,7 +41,7 @@ export default function QuizPage() {
     const accumulator: Record<string, number[]> = {};
     DIMENSION_KEYS.forEach((k) => (accumulator[k] = []));
 
-    for (const q of QUESTIONS) {
+    for (const q of QUIZ_QUESTIONS) {
       const choice = answers[q.id];
       const opt = q.options.find((o) => o.label === choice);
       if (opt?.dimensions) {
@@ -54,23 +54,42 @@ export default function QuizPage() {
     const persona = aggregatePersona(accumulator);
     const { archetype, summary } = deriveArchetypeAndSummary(persona);
 
+    // Store persona in sessionStorage for flashcard game
+    const studentPersona = {
+      student_id: `stu_${Date.now()}`,
+      name: (name || "Student").trim() || "Student",
+      generated_at: new Date().toISOString(),
+      persona,
+      archetype,
+      summary,
+    };
+    
+    try {
+      sessionStorage.setItem('studentPersona', JSON.stringify(studentPersona));
+    } catch (e) {
+      console.error('Failed to store persona in sessionStorage:', e);
+    }
+
+    // Try to save to backend, but don't block on failure
     try {
       const student = await createStudent({
-        name: (name || "Student").trim() || "Student",
+        name: studentPersona.name,
         persona,
         archetype,
         summary,
       });
       setCurrentStudent(student);
-      setStep("done");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save. Is the API running?");
-      setStep("error");
+      console.warn('Failed to save to backend, continuing anyway:', e);
+      // Continue to flashcard game even if API fails
     }
+    
+    // Navigate to flashcard game
+    window.location.href = "/quiz/flashcard";
   };
 
   const answeredCount = Object.keys(answers).length;
-  const allAnswered = answeredCount === QUESTIONS.length;
+  const allAnswered = answeredCount === QUIZ_QUESTIONS.length;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -136,12 +155,12 @@ export default function QuizPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <Badge variant="outline" className="rounded-full">
-                  Question {answeredCount} of {QUESTIONS.length}
+                  Question {answeredCount} of {QUIZ_QUESTIONS.length}
                 </Badge>
               </div>
-              <Progress value={(answeredCount / QUESTIONS.length) * 100} className="h-2" />
+              <Progress value={(answeredCount / QUIZ_QUESTIONS.length) * 100} className="h-2" />
             </div>
-            {QUESTIONS.map((q) => (
+            {QUIZ_QUESTIONS.map((q) => (
               <Card key={q.id}>
                 <CardHeader>
                   <CardTitle className="text-base font-medium">
@@ -171,7 +190,7 @@ export default function QuizPage() {
                 className="text-white hover:opacity-90"
                 style={{ background: "var(--tinder-gradient)" }}
               >
-                Submit and save to students
+                Continue to Memory Game
               </Button>
               <Button variant="outline" asChild>
                 <Link href="/">Cancel</Link>

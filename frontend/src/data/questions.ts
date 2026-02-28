@@ -44,6 +44,9 @@ export interface Question {
   options: QuestionOption[];
 }
 
+/**
+ * Full 20-question set (kept for reference)
+ */
 export const QUESTIONS: Question[] = [
   {
     id: 1,
@@ -245,4 +248,27 @@ export const QUESTIONS: Question[] = [
       { label: "D", text: '"Workshop-style — everyone\'s building or making something"', dimensions: { real_world_need: 0.9, autonomy: 0.8, social_preference: 0.6, interactivity: 0.6 } },
     ],
   },
+];
+
+/**
+ * Curated 5-question subset for quiz redesign
+ * Selected to maximize dimension coverage (16+ dimensions)
+ * 
+ * Question IDs: 1, 3, 7, 12, 18
+ * 
+ * Dimensions covered:
+ * - Q1: context_need, abstraction, real_world_need, autonomy, interactivity, structure, verbal_density
+ * - Q3: error_tolerance, question_comfort, social_preference, feedback_style, challenge_preference
+ * - Q7: revision_style, note_taking_style, visual_dependency, repetition_need
+ * - Q12: challenge_preference, emotional_sensitivity, motivation_type, cognitive_load_tolerance
+ * - Q18: structure, abstraction, real_world_need, context_need, autonomy
+ * 
+ * Total unique dimensions: 16
+ */
+export const QUIZ_QUESTIONS: Question[] = [
+  QUESTIONS[0],  // id: 1
+  QUESTIONS[2],  // id: 3
+  QUESTIONS[6],  // id: 7
+  QUESTIONS[11], // id: 12
+  QUESTIONS[17], // id: 18
 ];
