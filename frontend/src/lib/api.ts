@@ -40,6 +40,19 @@ export async function getTeacher(teacherId: string): Promise<Teacher> {
   return res.json();
 }
 
+export async function getPersonalizedSummary(
+  teacherId: string,
+  studentPersona: Record<string, number>
+): Promise<{ summary: string }> {
+  const res = await fetch(`${API_URL}/api/learn/personalized-summary`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teacherId, studentPersona }),
+  });
+  if (!res.ok) throw new Error("Failed to get personalized summary");
+  return res.json();
+}
+
 export async function getModalityPrompts(teacherId: string): Promise<{
   text_prompt: string;
   audio_prompt: string;

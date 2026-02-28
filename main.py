@@ -25,22 +25,6 @@ from pydantic import BaseModel, Field
 
 from matching import load_teachers, rank_teachers
 
-# #region agent log
-DEBUG_LOG_PATH = "/home/tiya.kumar/Desktop/hackathon/gde-mit/.cursor/debug-e36989.log"
-def _debug_log(message: str, data: dict | None = None, hypothesis_id: str | None = None) -> None:
-    import time
-    payload = {"sessionId": "e36989", "timestamp": int(time.time() * 1000), "location": "main.py", "message": message, "runId": "debug"}
-    if data is not None:
-        payload["data"] = data
-    if hypothesis_id is not None:
-        payload["hypothesisId"] = hypothesis_id
-    try:
-        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload) + "\n")
-    except Exception:
-        pass
-# #endregion
-
 # Same Azure OpenAI setup as output.py (env can override)
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://hesdi-mm4zauz8-eastus2.cognitiveservices.azure.com/openai/v1/")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.2-chat")
@@ -167,9 +151,6 @@ Return exactly a JSON object with the following keys:
 def _generate_study_plan(teacher: dict, student_persona: dict, topic: str, text_prompt: str) -> str:
     """Generate study plan for the student's topic in the teacher's style. Uses text_prompt if available, else a fallback so we still generate when modality prompts fail."""
     api_key = os.environ.get("OPENAI_API_KEY")
-    # #region agent log
-    _debug_log("_generate_study_plan_entry", {"has_api_key": bool(api_key), "topic_len": len(topic or ""), "text_prompt_len": len(text_prompt or "")}, "H2")
-    # #endregion
     if not api_key:
         return ""
     # If modality prompts failed or were skipped, use a fallback system prompt so we still generate a plan for the topic
@@ -177,7 +158,8 @@ def _generate_study_plan(teacher: dict, student_persona: dict, topic: str, text_
     teacher_subject = teacher.get("subject", "")
     fallback_system = f"""You are {teacher_name}, teaching {teacher_subject}. Your task is to generate a study plan in YOUR teaching style only. The plan must be for the topic the student requests. Use your own pacing, structure, tone, and pedagogical approach—do not match or adapt to the student's learning style; the output must reflect how you teach. Output only the study plan text, no meta-commentary."""
     system_content = (text_prompt.strip() or fallback_system)
-    # Explicit: plan for this topic, in the teacher's teaching style (not the student's learning style)
+    # Explicit: plan for this topic, in the teacher's teaching style (not the student's learning style).
+    # Ask for a short Outline at the top (main sections only) so the UI can show a clean outline.
     user_content = f"""The student has requested a study plan for this topic. Generate the plan only for this topic, in YOUR teaching style. The plan must reflect how you teach—your pace, structure, tone, and methods—not the student's preferred learning style. Student context is provided only for reference.
 
 Topic requested: {topic}
@@ -185,22 +167,32 @@ Topic requested: {topic}
 Student context (for reference only; do not match your style to theirs):
 {json.dumps(student_persona, indent=2)}
 
+STRUCTURE YOUR RESPONSE AS FOLLOWS:
+1. First line: write exactly "Outline" (or "Table of Contents").
+2. Next lines: list only the MAIN section titles, one per line (e.g. "Week 1: Functions — The Language of Calculus", "Week 2: Limits — The Central Idea"). Include only major sections (weeks, parts, or chapters)—do NOT list subsections like "Core Ideas", "Emphasis", "Proof Component", "Problem Set", "Reflection", "Conceptual Anchor", "Theorem Focus" in this list.
+3. One blank line.
+4. Then the full study plan body with all details, subsections, and content.
+
 Generate the study plan now. Ensure it is specifically about "{topic}" and is written in the teacher's teaching style."""
     try:
         client = OpenAI(base_url=OPENAI_BASE_URL, api_key=api_key)
-        completion = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": user_content},
-            ],
-            max_completion_tokens=1500,
-        )
-        return (completion.choices[0].message.content or "").strip()
-    except Exception as e:
-        # #region agent log
-        _debug_log("_generate_study_plan_exception", {"error_type": type(e).__name__, "error_msg": str(e)[:200]}, "H4")
-        # #endregion
+        for attempt, use_system in enumerate([system_content, fallback_system]):
+            if attempt == 1 and system_content == fallback_system:
+                break
+            completion = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": use_system},
+                    {"role": "user", "content": user_content},
+                ],
+                max_completion_tokens=1500,
+            )
+            raw = completion.choices[0].message.content if completion.choices else None
+            out = (raw or "").strip()
+            if out:
+                return out
+        return ""
+    except Exception:
         return ""
 
 
@@ -237,6 +229,11 @@ class LearnStudyPlanRequest(BaseModel):
     teacherId: str = Field(..., description="Teacher ID")
     studentPersona: dict[str, float] = Field(..., description="24 dimensions (0–1)")
     topic: str = Field(..., description="Topic for the study plan")
+
+
+class LearnPersonalizedSummaryRequest(BaseModel):
+    teacherId: str = Field(..., description="Teacher ID")
+    studentPersona: dict[str, float] = Field(..., description="24 dimensions (0–1)")
 
 
 def _load_students_data() -> dict:
@@ -297,6 +294,23 @@ def get_teacher(teacher_id: str) -> dict:
     raise HTTPException(status_code=404, detail="Teacher not found")
 
 
+@app.post("/api/learn/personalized-summary")
+def learn_personalized_summary(request: LearnPersonalizedSummaryRequest) -> dict:
+    """Return the AI-generated personalized summary for this teacher and student (same as on match cards)."""
+    teachers = get_teachers()
+    teacher = next((t for t in teachers if (t.get("teacher_id") or "").strip() == request.teacherId.strip()), None)
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    subject = (teacher.get("subject") or "").strip()
+    ranked = rank_teachers(teachers, request.studentPersona, subject=subject or None)
+    ranked_teacher = next((r for r in ranked if (r.get("teacher_id") or "").strip() == request.teacherId.strip()), None)
+    if not ranked_teacher:
+        summary = teacher.get("summary") or "No summary available."
+    else:
+        summary = _generate_personalized_summary(ranked_teacher)
+    return {"summary": summary}
+
+
 @app.post("/api/learn/prompts")
 def learn_prompts(request: LearnPromptsRequest) -> dict:
     """Generate text, audio, and video modality prompts for the given teacher."""
@@ -310,22 +324,13 @@ def learn_prompts(request: LearnPromptsRequest) -> dict:
 @app.post("/api/learn/study-plan")
 def learn_study_plan(request: LearnStudyPlanRequest) -> dict:
     """Generate a study plan for the topic in this teacher's style, tailored to the student persona."""
-    # #region agent log
-    _debug_log("study_plan_request", {"teacherId": request.teacherId, "topic_len": len(request.topic or ""), "topic_preview": (request.topic or "")[:40], "persona_keys": len(request.studentPersona or {})}, "H1")
-    # #endregion
     teachers = get_teachers()
     teacher = next((t for t in teachers if (t.get("teacher_id") or "").strip() == request.teacherId.strip()), None)
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
     prompts = _generate_modality_prompts(teacher)
     text_prompt = prompts.get("text_prompt", "")
-    # #region agent log
-    _debug_log("after_prompts", {"text_prompt_len": len(text_prompt)}, "H4")
-    # #endregion
     plan = _generate_study_plan(teacher, request.studentPersona, request.topic, text_prompt)
-    # #region agent log
-    _debug_log("study_plan_result", {"plan_len": len(plan)}, "H5")
-    # #endregion
     return {"study_plan": plan, "text_prompt": text_prompt}
 
 
