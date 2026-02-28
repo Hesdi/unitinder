@@ -246,6 +246,12 @@ class GenerateByTeacherRequest(BaseModel):
     teacher_id: str = Field(..., description="Teacher ID")
     text: str = Field(..., description="Text to convert to speech in teacher's voice")
 
+
+class TeacherPreviewRequest(BaseModel):
+    teacher_id: str = Field(..., description="Teacher ID")
+    topic: str = Field(..., description="Subject/topic for the teaching preview (e.g. 'Calculus', 'Limits')")
+
+
 # Max chars for TTS to stay within ElevenLabs limits
 TTS_MAX_TEXT_LENGTH = 4500
 
@@ -669,6 +675,104 @@ def generate_audio_by_teacher(request: GenerateByTeacherRequest) -> Response:
         audio_bytes = generate_speech(voice_id, text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TTS failed: {e}")
+    return Response(content=audio_bytes, media_type="audio/mpeg")
+
+
+def _generate_teaching_preview(teacher: dict, topic: str) -> str:
+    """
+    Generate a ~2 minute script where the teacher introduces how they would
+    teach the given topic/subject. Written in first person, in the teacher's
+    persona and teaching style.
+    """
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return ""
+
+    name = teacher.get("name", "Teacher")
+    subject = teacher.get("subject", "")
+    archetype = teacher.get("archetype", "")
+    tagline = teacher.get("tagline", "")
+    persona = teacher.get("persona", {})
+
+    prompt = f"""You are {name}, a {subject} teacher. Your archetype is "{archetype}" and your tagline is "{tagline}".
+
+Write a 300-400 word monologue (approximately 2 minutes when spoken aloud) where you introduce yourself and explain how you would teach "{topic}" to a student.
+
+IMPORTANT RULES:
+- Write in FIRST PERSON as if you are the teacher speaking directly to a student
+- Match the teacher's personality: if they are warm and casual, be warm and casual; if formal and rigorous, be formal and rigorous
+- Start with a brief self-introduction ("Hey, I'm {name}..." or "Good morning, I'm Professor {name}..." depending on style)
+- Explain YOUR approach to teaching {topic} — what makes your method unique
+- Give a small taste/example of how a typical lesson would go
+- End with something encouraging or motivating
+- Do NOT use bullet points, headers, or formatting — this is a SPOKEN monologue meant for text-to-speech
+- Do NOT include stage directions, emojis, or anything that isn't spoken words
+- Keep it natural and conversational, as if speaking to a student sitting in front of you
+
+Teacher personality traits (0-1 scale, for reference):
+- Pace: {persona.get('pace', 0.5)} (0=slow, 1=fast)
+- Formality: {persona.get('formality', 0.5)} (0=casual, 1=formal)
+- Humor: {persona.get('humor_receptivity', 0.5)} (0=serious, 1=humorous)
+- Interactivity: {persona.get('interactivity', 0.5)} (0=lecture-style, 1=interactive)
+- Abstraction: {persona.get('abstraction', 0.5)} (0=concrete examples, 1=abstract theory)
+- Storytelling: {persona.get('storytelling_affinity', 0.5)} (0=factual, 1=storyteller)
+
+Write ONLY the monologue text. No labels, no formatting."""
+
+    try:
+        client = OpenAI(base_url=OPENAI_BASE_URL, api_key=api_key)
+        completion = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": f"You are {name}, a {subject} teacher. Write exactly as you would speak — natural, in-character, no formatting."},
+                {"role": "user", "content": prompt},
+            ],
+            max_completion_tokens=800,
+        )
+        text = (completion.choices[0].message.content or "").strip()
+        return text
+    except Exception:
+        return ""
+
+
+@app.post("/api/voice/teacher-preview")
+def teacher_preview(request: TeacherPreviewRequest) -> Response:
+    """
+    Generate a ~2 minute audio preview of how a teacher would teach a given topic.
+    1. LLM generates a monologue script in the teacher's style
+    2. ElevenLabs TTS speaks it in the teacher's voice
+    Returns MP3 audio.
+    """
+    if generate_speech is None:
+        raise HTTPException(status_code=503, detail="TTS unavailable. Install elevenlabs.")
+
+    teachers = get_teachers()
+    teacher = next(
+        (t for t in teachers if (t.get("teacher_id") or "").strip() == request.teacher_id.strip()),
+        None,
+    )
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    voice_id = (teacher.get("voice_id") or "").strip()
+    if not voice_id:
+        raise HTTPException(status_code=400, detail="Teacher has no voice assigned.")
+
+    # Step 1: Generate the teaching preview script
+    script = _generate_teaching_preview(teacher, request.topic)
+    if not script:
+        raise HTTPException(status_code=503, detail="Failed to generate teaching preview script. Check OPENAI_API_KEY.")
+
+    # Truncate if needed
+    if len(script) > TTS_MAX_TEXT_LENGTH:
+        script = script[:TTS_MAX_TEXT_LENGTH - 3].rstrip() + "..."
+
+    # Step 2: Generate audio with teacher's voice
+    try:
+        audio_bytes = generate_speech(voice_id, script)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS failed: {e}")
+
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
