@@ -359,16 +359,6 @@ def list_teachers() -> dict:
     return {"teachers": teachers}
 
 
-@app.get("/api/teachers/{teacher_id}")
-def get_teacher(teacher_id: str) -> dict:
-    """Return a single teacher by teacher_id. 404 if not found."""
-    teachers = get_teachers()
-    for t in teachers:
-        if (t.get("teacher_id") or "").strip() == teacher_id.strip():
-            return t
-    raise HTTPException(status_code=404, detail="Teacher not found")
-
-
 def _teacher_insights(teacher_id: str) -> dict:
     """
     Anonymized analytics for a teacher: who tends to swipe right (like) on them.
@@ -443,6 +433,16 @@ def get_teacher_insights(teacher_id: str) -> dict:
     if result is None:
         raise HTTPException(status_code=404, detail="Teacher not found")
     return result
+
+
+@app.get("/api/teachers/{teacher_id}")
+def get_teacher(teacher_id: str) -> dict:
+    """Return a single teacher by teacher_id. 404 if not found."""
+    teachers = get_teachers()
+    for t in teachers:
+        if (t.get("teacher_id") or "").strip() == teacher_id.strip():
+            return t
+    raise HTTPException(status_code=404, detail="Teacher not found")
 
 
 @app.post("/api/learn/personalized-summary")
