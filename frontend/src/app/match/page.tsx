@@ -1,262 +1,280 @@
-"use client";
+/**
+ * Matching Carousel Page
+ * 
+ * 3D carousel interface displaying teacher matches as wooden university doors.
+ * Supports drag gestures for navigation and door swing animation on selection.
+ * 
+ * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 9.6
+ */
 
-import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import TinderCard from "react-tinder-card";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { CardSpotlight } from "@/components/ui/aceternity/card-spotlight";
-import {
-  getStudents,
-  matchTeachers,
-  SUBJECTS,
-  type Student,
-  type RankedTeacher,
-} from "@/lib/api";
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { TeacherDoor } from '@/components/TeacherDoor';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { rotateCarousel } from '@/lib/carousel';
+import type { RankedTeacher, DoorTransform } from '@/types';
 
 export default function MatchPage() {
-  const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [studentId, setStudentId] = useState("");
-  const [subject, setSubject] = useState("");
-  const [ranked, setRanked] = useState<RankedTeacher[] | null>(null);
-  const [remainingTeachers, setRemainingTeachers] = useState<RankedTeacher[]>([]);
-  const [matching, setMatching] = useState(false);
-  const [error, setError] = useState("");
-  const [swipeOverlay, setSwipeOverlay] = useState<{
-    teacherId: string;
-    direction: "left" | "right";
-  } | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
+  // Parse URL parameters
+  const studentId = searchParams.get('studentId');
+  const materialId = searchParams.get('materialId');
+  const teachersParam = searchParams.get('teachers');
+
+  const [teachers, setTeachers] = useState<RankedTeacher[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [isSwinging, setIsSwinging] = useState(false);
+  const [doorTransforms, setDoorTransforms] = useState<Record<number, DoorTransform>>({});
+
+  // Load teachers from URL parameter
   useEffect(() => {
-    getStudents()
-      .then((data) => {
-        setStudents(data.students);
-        if (data.students.length > 0 && !studentId)
-          setStudentId(data.students[0].student_id);
-        if (!subject) setSubject(SUBJECTS[0]);
-      })
-      .catch((e) =>
-        setError(e instanceof Error ? e.message : "Failed to load students")
-      )
-      .finally(() => setLoading(false));
-  }, [studentId, subject]);
+    if (teachersParam) {
+      try {
+        const parsed = JSON.parse(teachersParam);
+        // Add rank to each teacher based on their position in the sorted array
+        parsed.forEach((teacher: RankedTeacher, index: number) => {
+          (teacher as any).rank = index + 1;
+        });
+        setTeachers(parsed);
+        initializeDoorTransforms(parsed.length, 0);
+      } catch (e) {
+        console.error('Failed to parse teachers:', e);
+      }
+    }
+  }, [teachersParam]);
 
-  const selectedStudent = students.find((s) => s.student_id === studentId);
+  // Initialize door transforms for visible doors
+  const initializeDoorTransforms = (totalTeachers: number, centerIndex: number) => {
+    if (totalTeachers === 0) return;
 
-  const handleMatch = async () => {
-    if (!selectedStudent) return;
-    setError("");
-    setMatching(true);
-    setRanked(null);
-    setRemainingTeachers([]);
-    try {
-      const data = await matchTeachers({
-        studentPersona: selectedStudent.persona,
-        subject: subject || null,
-      });
-      setRanked(data.ranked);
-      setRemainingTeachers(data.ranked);
-    } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Failed to match. Is the API running?"
+    const leftIndex = (centerIndex - 1 + totalTeachers) % totalTeachers;
+    const rightIndex = (centerIndex + 1) % totalTeachers;
+
+    const transforms: Record<number, DoorTransform> = {
+      [leftIndex]: {
+        scale: 0.85,
+        translateX: -400,
+        translateZ: -200,
+        blur: 4,
+        opacity: 0.7,
+      },
+      [centerIndex]: {
+        scale: 1.1,
+        translateX: 0,
+        translateZ: 0,
+        blur: 0,
+        opacity: 1.0,
+      },
+      [rightIndex]: {
+        scale: 0.85,
+        translateX: 400,
+        translateZ: -200,
+        blur: 4,
+        opacity: 0.7,
+      },
+    };
+
+    setDoorTransforms(transforms);
+  };
+
+
+
+  // Handle center door click
+  const handleDoorClick = useCallback(() => {
+    if (isAnimating) return;
+
+    const selectedTeacher = teachers[activeIndex];
+    if (!selectedTeacher) return;
+
+    // Trigger door swing animation
+    setIsSwinging(true);
+
+    // Navigate to demo page after animation completes (800ms)
+    setTimeout(() => {
+      router.push(
+        `/demo?teacherId=${selectedTeacher.teacher_id}&studentId=${studentId}&materialId=${materialId}`
       );
-    } finally {
-      setMatching(false);
-    }
+    }, 800);
+  }, [isAnimating, activeIndex, teachers, studentId, materialId, router]);
+
+  // Handle rotation buttons
+  const handleRotateLeft = useCallback(() => {
+    if (isAnimating || teachers.length === 0) return;
+
+    setIsAnimating(true);
+    const transition = rotateCarousel(activeIndex, 'left', teachers);
+
+    setActiveIndex(transition.newIndex);
+    setDoorTransforms(transition.positions);
+
+    setTimeout(() => {
+      setIsAnimating(false);
+    }, transition.duration);
+  }, [isAnimating, activeIndex, teachers]);
+
+  const handleRotateRight = useCallback(() => {
+    if (isAnimating || teachers.length === 0) return;
+
+    setIsAnimating(true);
+    const transition = rotateCarousel(activeIndex, 'right', teachers);
+
+    setActiveIndex(transition.newIndex);
+    setDoorTransforms(transition.positions);
+
+    setTimeout(() => {
+      setIsAnimating(false);
+    }, transition.duration);
+  }, [isAnimating, activeIndex, teachers]);
+
+  // Get visible door indices
+  const getVisibleDoors = () => {
+    if (teachers.length === 0) return [];
+
+    const totalTeachers = teachers.length;
+    const leftIndex = (activeIndex - 1 + totalTeachers) % totalTeachers;
+    const rightIndex = (activeIndex + 1) % totalTeachers;
+
+    return [
+      { index: leftIndex, position: 'left' as const },
+      { index: activeIndex, position: 'center' as const },
+      { index: rightIndex, position: 'right' as const },
+    ];
   };
 
-  const handleSwipe = useCallback((teacherId: string, direction: string) => {
-    if (direction === "left" || direction === "right") {
-      setSwipeOverlay({ teacherId, direction });
-    }
-  }, []);
-
-  const handleCardLeftScreen = useCallback((teacherId: string) => {
-    setRemainingTeachers((prev) => prev.filter((t) => t.teacher_id !== teacherId));
-    setSwipeOverlay(null);
-  }, []);
-
-  const handleMatchAgain = () => {
-    setRanked(null);
-    setRemainingTeachers([]);
-  };
-
-  const showSwipeStack = ranked && ranked.length > 0;
-  const noCardsLeft = showSwipeStack && remainingTeachers.length === 0;
+  const visibleDoors = getVisibleDoors();
+  const centerTeacher = teachers[activeIndex];
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-4 py-4 sm:px-6">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white">
+      <header className="border-b border-slate-700 px-4 py-4 sm:px-6">
         <Link href="/" className="text-xl font-semibold">
-          Unitinder
+          Student-Teacher Matching
         </Link>
         <Badge variant="secondary" className="ml-3 rounded-full">
           Match
         </Badge>
       </header>
-      <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
-        <h1 className="mb-6 text-2xl font-semibold">Match with teachers</h1>
 
-        {loading && (
-          <p className="text-muted-foreground text-sm">Loading students…</p>
-        )}
-        {error && (
-          <p className="text-destructive mb-4 text-sm">{error}</p>
-        )}
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+        <h1 className="mb-8 text-center text-3xl font-bold">
+          Find Your Perfect Teacher
+        </h1>
 
-        {!loading && students.length === 0 && (
-          <Card>
-            <CardContent className="py-8">
-              <p className="text-muted-foreground">
-                No students yet. Take the quiz to add your profile, then come
-                back here.
-              </p>
-              <Button asChild className="mt-4">
-                <Link href="/quiz">Take the quiz</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {!loading && students.length > 0 && !showSwipeStack && (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  Choose student and subject
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Student</Label>
-                  <select
-                    value={studentId}
-                    onChange={(e) => setStudentId(e.target.value)}
-                    className="mt-1 flex h-9 w-full max-w-xs items-center justify-between rounded-2xl border border-input bg-transparent px-3 py-2 text-sm"
-                  >
-                    {students.map((s) => (
-                      <option key={s.student_id} value={s.student_id}>
-                        {s.name} ({s.student_id})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label>Subject</Label>
-                  <select
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    className="mt-1 flex h-9 w-full max-w-xs items-center justify-between rounded-2xl border border-input bg-transparent px-3 py-2 text-sm"
-                  >
-                    {SUBJECTS.map((sub) => (
-                      <option key={sub} value={sub}>
-                        {sub}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <Button
-                  onClick={handleMatch}
-                  disabled={matching}
-                  className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
-                >
-                  {matching ? "Matching…" : "Find teachers"}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {ranked !== null && ranked.length === 0 && (
-              <p className="text-muted-foreground">
-                No teachers found for this subject.
-              </p>
-            )}
+        {teachers.length === 0 ? (
+          <div className="text-center">
+            <p className="mb-4 text-gray-400">
+              No teachers to display. Please complete the quiz and upload learning material first.
+            </p>
+            <Button asChild>
+              <Link href="/quiz">Take Quiz</Link>
+            </Button>
           </div>
-        )}
-
-        {showSwipeStack && remainingTeachers.length > 0 && (
-          <div className="relative mx-auto h-[520px] w-full max-w-sm">
-            {[...remainingTeachers].reverse().map((teacher) => (
-              <TinderCard
-                key={teacher.teacher_id}
-                onSwipe={(dir) => handleSwipe(teacher.teacher_id, dir)}
-                onCardLeftScreen={() =>
-                  handleCardLeftScreen(teacher.teacher_id)
-                }
-                preventSwipe={["up", "down"]}
-                className="absolute h-full w-full"
+        ) : (
+          <>
+            {/* 3D Carousel Container */}
+            <div
+              className="relative mx-auto"
+              style={{
+                width: '100%',
+                height: '700px',
+                perspective: '1200px',
+                perspectiveOrigin: '50% 50%',
+              }}
+            >
+              {/* Carousel stage */}
+              <div
+                className="relative h-full w-full"
+                style={{
+                  transformStyle: 'preserve-3d',
+                  transform: 'none',
+                  transition: 'transform 0.3s ease-out',
+                }}
               >
-                <div className="relative h-full w-full">
-                  <CardSpotlight
-                    color="var(--gradient-lavender)"
-                    radius={280}
-                    className="h-full border-0 bg-card shadow-md"
-                  >
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">
-                        {teacher.name} · {teacher.subject}
-                      </CardTitle>
-                      <p className="text-muted-foreground text-sm">
-                        Score: {teacher.compatibility_score} · {teacher.archetype}
-                      </p>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      <p className="text-muted-foreground italic">
-                        {teacher.tagline}
-                      </p>
-                      <p>{teacher.summary}</p>
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        <Badge
-                          variant="secondary"
-                          className="rounded-full text-xs"
-                        >
-                          Best: {teacher.why.best.join(", ")}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className="rounded-full text-xs"
-                        >
-                          Worst: {teacher.why.worst.join(", ")}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </CardSpotlight>
-                  {swipeOverlay?.teacherId === teacher.teacher_id && (
-                    <div
-                      className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl text-2xl font-bold"
-                      style={{
-                        backgroundColor:
-                          swipeOverlay.direction === "right"
-                            ? "rgba(34, 197, 94, 0.85)"
-                            : "rgba(239, 68, 68, 0.85)",
-                        color: "white",
-                      }}
-                    >
-                      {swipeOverlay.direction === "right" ? "MATCH ✓" : "SKIP ✗"}
-                    </div>
-                  )}
-                </div>
-              </TinderCard>
-            ))}
-          </div>
-        )}
+                {/* Render visible doors */}
+                {visibleDoors.map(({ index, position }) => {
+                  const teacher = teachers[index];
+                  const transform = doorTransforms[index];
 
-        {noCardsLeft && (
-          <Card className="mt-8">
-            <CardContent className="py-8 text-center">
-              <p className="text-muted-foreground mb-4">
-                No more teachers. Match again to get a fresh stack.
-              </p>
+                  if (!teacher || !transform) return null;
+
+                  return (
+                    <TeacherDoor
+                      key={teacher.teacher_id}
+                      teacher={teacher}
+                      position={position}
+                      transform={transform}
+                      isSwinging={isSwinging && position === 'center'}
+                      onClick={position === 'center' ? handleDoorClick : undefined}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Click hint */}
+              {!isAnimating && (
+                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-center">
+                  <p className="text-sm text-gray-400">
+                    Click center door to select
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Navigation buttons */}
+            <div className="mt-8 flex items-center justify-center gap-8">
               <Button
-                onClick={handleMatchAgain}
-                className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
+                onClick={handleRotateLeft}
+                disabled={isAnimating || teachers.length === 0}
+                variant="outline"
+                size="lg"
               >
-                Match again
+                ← Previous
               </Button>
-            </CardContent>
-          </Card>
+
+              <div className="text-center">
+                <p className="text-sm text-gray-400">
+                  {activeIndex + 1} of {teachers.length}
+                </p>
+              </div>
+
+              <Button
+                onClick={handleRotateRight}
+                disabled={isAnimating || teachers.length === 0}
+                variant="outline"
+                size="lg"
+              >
+                Next →
+              </Button>
+            </div>
+
+            {/* Teacher details */}
+            {centerTeacher && (
+              <div className="mx-auto mt-12 max-w-2xl rounded-lg bg-slate-800/50 p-6 backdrop-blur-sm">
+                <h2 className="mb-2 text-2xl font-bold">{centerTeacher.name}</h2>
+                <p className="mb-4 text-gray-400">
+                  {centerTeacher.subject} • {centerTeacher.archetype}
+                </p>
+                <p className="mb-4 italic text-gray-300">{centerTeacher.tagline}</p>
+                <p className="mb-6 text-gray-200">{centerTeacher.summary}</p>
+
+                <div className="flex flex-wrap gap-3">
+                  <Badge variant="default" className="rounded-full">
+                    Best Match: {centerTeacher.why.best.join(', ')}
+                  </Badge>
+                  <Badge variant="outline" className="rounded-full">
+                    Areas to Improve: {centerTeacher.why.worst.join(', ')}
+                  </Badge>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </main>
     </div>
