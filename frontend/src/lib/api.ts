@@ -34,9 +34,31 @@ export async function matchTeachers(body: {
   return res.json();
 }
 
+export async function getTeachers(): Promise<{ teachers: Teacher[] }> {
+  const res = await fetch(`${API_URL}/api/teachers`);
+  if (!res.ok) throw new Error("Failed to fetch teachers");
+  return res.json();
+}
+
 export async function getTeacher(teacherId: string): Promise<Teacher> {
   const res = await fetch(`${API_URL}/api/teachers/${encodeURIComponent(teacherId)}`);
   if (!res.ok) throw new Error("Failed to fetch teacher");
+  return res.json();
+}
+
+export interface TeacherInsights {
+  teacher_id: string;
+  total_likes: number;
+  archetype_distribution: { archetype: string; count: number }[];
+  average_liker_persona: Record<string, number>;
+  top_aligning_traits: string[];
+  least_aligning_traits: string[];
+  alignment_detail: { dimension: string; avg_student_value: number; teacher_value: number; distance: number }[];
+}
+
+export async function getTeacherInsights(teacherId: string): Promise<TeacherInsights> {
+  const res = await fetch(`${API_URL}/api/teachers/${encodeURIComponent(teacherId)}/insights`);
+  if (!res.ok) throw new Error("Failed to fetch teacher insights");
   return res.json();
 }
 

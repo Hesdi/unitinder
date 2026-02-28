@@ -352,6 +352,13 @@ def remove_student_like(student_id: str, teacher_id: str) -> dict:
     return {"teachers": data[student_id]}
 
 
+@app.get("/api/teachers")
+def list_teachers() -> dict:
+    """Return all teachers (for teacher list / dashboard entry)."""
+    teachers = get_teachers()
+    return {"teachers": teachers}
+
+
 @app.get("/api/teachers/{teacher_id}")
 def get_teacher(teacher_id: str) -> dict:
     """Return a single teacher by teacher_id. 404 if not found."""
@@ -360,6 +367,82 @@ def get_teacher(teacher_id: str) -> dict:
         if (t.get("teacher_id") or "").strip() == teacher_id.strip():
             return t
     raise HTTPException(status_code=404, detail="Teacher not found")
+
+
+def _teacher_insights(teacher_id: str) -> dict:
+    """
+    Anonymized analytics for a teacher: who tends to swipe right (like) on them.
+    No student names or IDs in the response; only aggregates (archetypes, persona averages).
+    """
+    teachers = get_teachers()
+    teacher = next((t for t in teachers if (t.get("teacher_id") or "").strip() == teacher_id.strip()), None)
+    if not teacher:
+        return None
+    likes_data = _load_likes_data()
+    students_data = _load_students_data()
+    students_list = students_data.get("students") or []
+    id_to_student = {(s.get("student_id") or "").strip(): s for s in students_list}
+
+    # Student IDs who liked this teacher
+    liker_ids = []
+    for sid, tids in likes_data.items():
+        if not sid or not isinstance(tids, list):
+            continue
+        if teacher_id.strip() in [(t or "").strip() for t in tids]:
+            liker_ids.append(sid.strip())
+
+    likers = [id_to_student[sid] for sid in liker_ids if sid in id_to_student]
+    total_likes = len(likers)
+
+    # Archetype distribution (no names)
+    archetype_counts: dict[str, int] = {}
+    for s in likers:
+        arch = (s.get("archetype") or "Unknown").strip() or "Unknown"
+        archetype_counts[arch] = archetype_counts.get(arch, 0) + 1
+    archetype_distribution = [{"archetype": k, "count": v} for k, v in sorted(archetype_counts.items(), key=lambda x: -x[1])]
+
+    # Average persona of likers (per dimension)
+    from matching import DIMENSION_KEYS
+    avg_persona: dict[str, float] = {}
+    for dim in DIMENSION_KEYS:
+        vals = []
+        for s in likers:
+            p = s.get("persona") or {}
+            if isinstance(p.get(dim), (int, float)):
+                vals.append(float(p[dim]))
+        avg_persona[dim] = round(sum(vals) / len(vals), 3) if vals else 0.5
+
+    # Dimensions where likers align best with this teacher (smallest distance)
+    teacher_persona = teacher.get("persona") or {}
+    alignment = []
+    for dim in DIMENSION_KEYS:
+        t_val = teacher_persona.get(dim, 0.5)
+        s_val = avg_persona.get(dim, 0.5)
+        diff = abs(t_val - s_val)
+        alignment.append({"dimension": dim, "avg_student_value": s_val, "teacher_value": t_val, "distance": round(diff, 3)})
+    alignment.sort(key=lambda x: x["distance"])
+    top_aligning_traits = [a["dimension"] for a in alignment[:5]]
+    least_aligning_traits = [a["dimension"] for a in alignment[-3:][::-1]]
+
+    # Summary sentences (no names)
+    return {
+        "teacher_id": teacher_id.strip(),
+        "total_likes": total_likes,
+        "archetype_distribution": archetype_distribution,
+        "average_liker_persona": avg_persona,
+        "top_aligning_traits": top_aligning_traits,
+        "least_aligning_traits": least_aligning_traits,
+        "alignment_detail": alignment[:10],
+    }
+
+
+@app.get("/api/teachers/{teacher_id}/insights")
+def get_teacher_insights(teacher_id: str) -> dict:
+    """Return anonymized insights for this teacher: who tends to like them (no student names)."""
+    result = _teacher_insights(teacher_id.strip())
+    if result is None:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    return result
 
 
 @app.post("/api/learn/personalized-summary")

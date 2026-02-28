@@ -44,6 +44,12 @@ export default function Home() {
             <Link href="/saved">My teachers</Link>
           </Button>
         </div>
+        <p className="mt-6 text-sm text-muted-foreground">
+          But I&apos;m a teacher —{" "}
+          <Link href="/teachers" className="font-medium text-[var(--tinder-pink)] underline underline-offset-2 hover:opacity-90">
+            view my dashboard
+          </Link>
+        </p>
         </main>
       </div>
     </AuroraBackground>

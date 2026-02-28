@@ -143,4 +143,16 @@ def rank_teachers(
         )
 
     results.sort(key=lambda r: r["compatibility_score"], reverse=True)
+
+    # Normalize compatibility_score to 0–100 so best = 100, worst = 0 (raw formula gives ~1–20 for typical distances)
+    if results:
+        scores = [r["compatibility_score"] for r in results]
+        min_s, max_s = min(scores), max(scores)
+        if max_s > min_s:
+            for r in results:
+                r["compatibility_score"] = round(100.0 * (r["compatibility_score"] - min_s) / (max_s - min_s), 2)
+        else:
+            for r in results:
+                r["compatibility_score"] = 100.0
+
     return results

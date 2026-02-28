@@ -111,9 +111,18 @@ export default function MatchPage() {
               <p className="text-muted-foreground">
                 Take the quiz first to get your learning profile, then come back here.
               </p>
-              <Button asChild className="mt-4 bg-[var(--tinder-pink)] text-white hover:opacity-90">
-                <Link href="/quiz">Take the quiz</Link>
-              </Button>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Button asChild className="bg-[var(--tinder-pink)] text-white hover:opacity-90" style={{ background: "var(--tinder-gradient)" }}>
+                  <Link href="/quiz">Take the quiz</Link>
+                </Button>
+                <span className="text-muted-foreground text-sm">or</span>
+                <Link
+                  href="/teachers"
+                  className="text-sm font-medium text-[var(--tinder-pink)] underline underline-offset-2 hover:opacity-90"
+                >
+                  I&apos;m a teacher — view my dashboard
+                </Link>
+              </div>
             </CardContent>
           </Card>
         )}

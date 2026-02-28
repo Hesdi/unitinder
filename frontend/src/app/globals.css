@@ -68,6 +68,9 @@
   --tinder-like: #00E676;
   --tinder-nope: #FF4757;
   --tinder-gradient: linear-gradient(135deg, var(--tinder-pink) 0%, var(--tinder-coral) 100%);
+  /* Match-based card gradient (high = pink, low = red) */
+  --match-color-high: #FE3C72;
+  --match-color-low: #E63946;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

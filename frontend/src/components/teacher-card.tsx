@@ -4,6 +4,30 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { RankedTeacher } from "@/lib/api";
 
+/** Blend two hex colors; t in [0,1] (0 = a, 1 = b). */
+function blendHex(a: string, b: string, t: number): string {
+  const parse = (hex: string) => {
+    const n = hex.replace("#", "");
+    return [parseInt(n.slice(0, 2), 16), parseInt(n.slice(2, 4), 16), parseInt(n.slice(4, 6), 16)];
+  };
+  const [r1, g1, b1] = parse(a);
+  const [r2, g2, b2] = parse(b);
+  const r = Math.round(r1 + (r2 - r1) * t);
+  const g = Math.round(g1 + (g2 - g1) * t);
+  const bl = Math.round(b1 + (b2 - b1) * t);
+  return `rgb(${r},${g},${bl})`;
+}
+
+/** Gradient for card hero: high score = more pink, low = more red (0–100). */
+function getMatchGradient(score: number): string {
+  const p = Math.max(0, Math.min(100, score)) / 100;
+  const highHex = "#FE3C72";
+  const lowHex = "#E63946";
+  const left = blendHex(lowHex, highHex, p);
+  const right = blendHex(lowHex, highHex, Math.max(0, p - 0.15));
+  return `linear-gradient(135deg, ${left} 0%, ${right} 100%)`;
+}
+
 interface TeacherCardProps {
   teacher: RankedTeacher;
   studentId?: string | null;
@@ -28,7 +52,7 @@ export function TeacherCard({
         className
       )}
     >
-      {/* Hero section — ~35–40% of card height */}
+      {/* Hero section — color by match % (pink = high, red = low) */}
       <div
         className="flex-shrink-0"
         style={{ height: "38%" }}
@@ -36,7 +60,7 @@ export function TeacherCard({
         <div
           className="h-full w-full"
           style={{
-            background: "var(--tinder-gradient)",
+            background: getMatchGradient(teacher.compatibility_score),
           }}
         />
       </div>
@@ -49,7 +73,7 @@ export function TeacherCard({
             {teacher.name} · {teacher.subject}
           </h3>
           <p className="text-sm text-muted-foreground">
-            Score: {teacher.compatibility_score} · {teacher.archetype}
+            Score: {teacher.compatibility_score}% · {teacher.archetype}
           </p>
         </div>
 
@@ -65,12 +89,12 @@ export function TeacherCard({
           {teacher.summary}
         </p>
 
-        {/* Learn more link */}
+        {/* CTA: Learn with [teacher] to see if it's a match */}
         <Link
           href={learnHref}
-          className="mt-3 inline-block text-sm font-medium text-[var(--tinder-pink)] hover:underline"
+          className="mt-4 block w-full rounded-xl bg-[var(--tinder-pink)] px-4 py-3 text-center text-sm font-semibold text-white shadow-md transition hover:opacity-90"
         >
-          Learn more
+          LEARN WITH {teacher.name.toUpperCase()} TO SEE IF IT&apos;S A MATCH
         </Link>
       </div>
 
