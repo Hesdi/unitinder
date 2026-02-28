@@ -380,7 +380,7 @@ export default function LearnPage() {
           <CardHeader>
             <CardTitle className="text-base">Study plan</CardTitle>
             <p className="text-muted-foreground text-sm">
-              Get a study plan in this teacher&apos;s style. Your profile from the quiz is used to personalize the plan.
+              Get a study plan in this teacher&apos;s style. This teachers profile from the quiz is used to personalize the plan.
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
