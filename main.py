@@ -1,10 +1,3 @@
-"""
-Unitinder — Matching API.
-POST /api/match with body { studentPersona, subject? } returns ranked teachers
-with compatibility score and best/worst dimension "why".
-GET /api/students returns all students; POST /api/students appends one to students.json.
-"""
-
 import json
 import os
 import random
@@ -17,13 +10,14 @@ from dotenv import load_dotenv
 _BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(_BASE_DIR / ".env", override=True)
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
 from matching import load_teachers, rank_teachers
+from voice import clone_teacher_voice, generate_speech, list_cloned_voices, save_audio, extract_audio_from_video, full_pipeline
 
 # Same Azure OpenAI setup as output.py (env can override)
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://hesdi-mm4zauz8-eastus2.cognitiveservices.azure.com/openai/v1/")
@@ -44,6 +38,8 @@ BASE_DIR = Path(__file__).resolve().parent
 TEACHERS_PATH = Path(os.environ["UNITINDER_TEACHERS_PATH"]) if os.environ.get("UNITINDER_TEACHERS_PATH") else BASE_DIR / "teachers.json"
 STUDENTS_PATH = Path(os.environ["UNITINDER_STUDENTS_PATH"]) if os.environ.get("UNITINDER_STUDENTS_PATH") else BASE_DIR / "students.json"
 LIKES_PATH = Path(os.environ["UNITINDER_LIKES_PATH"]) if os.environ.get("UNITINDER_LIKES_PATH") else BASE_DIR / "likes.json"
+AUDIO_DIR = BASE_DIR / "audio"
+AUDIO_DIR.mkdir(exist_ok=True)
 _teachers_cache: list | None = None
 
 
@@ -237,6 +233,11 @@ class LearnPersonalizedSummaryRequest(BaseModel):
     studentPersona: dict[str, float] = Field(..., description="24 dimensions (0–1)")
 
 
+class TTSRequest(BaseModel):
+    voice_id: str = Field(..., description="ElevenLabs voice ID")
+    text: str = Field(..., description="Text to convert to speech")
+
+
 def _load_students_data() -> dict:
     """Load students.json; return { students: [] } if missing or on read error."""
     if not STUDENTS_PATH.exists():
@@ -275,9 +276,23 @@ def _save_likes_data(data: dict) -> None:
         json.dump(data, f, indent=2)
 
 
+def _load_teachers_raw() -> dict:
+    """Load raw teachers.json for editing."""
+    with open(TEACHERS_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _save_teachers_raw(data: dict) -> None:
+    """Save raw teachers.json."""
+    with open(TEACHERS_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
 class AddLikeRequest(BaseModel):
     teacher_id: str = Field(..., description="Teacher ID to add to this student's liked list")
 
+
+# ── Student endpoints ─────────────────────────────────────────────────
 
 @app.get("/api/students")
 def get_students() -> dict:
@@ -307,6 +322,8 @@ def create_student(request: CreateStudentRequest) -> JSONResponse:
     _save_students_data(data)
     return JSONResponse(content=student, status_code=status.HTTP_201_CREATED)
 
+
+# ── Likes endpoints ──────────────────────────────────────────────────
 
 @app.get("/api/students/{student_id}/likes")
 def get_student_likes(student_id: str) -> dict:
@@ -352,10 +369,43 @@ def remove_student_like(student_id: str, teacher_id: str) -> dict:
     return {"teachers": data[student_id]}
 
 
+# ── Match endpoint ────────────────────────────────────────────────────
+
+@app.post("/api/match", response_model=MatchResponse)
+def match(request: MatchRequest) -> MatchResponse:
+    """
+    Rank teachers by compatibility with the given student persona.
+    Optionally filter by subject. Each teacher's summary is replaced with an
+    AI-generated, student-specific summary when OPENAI_API_KEY is set.
+    """
+    try:
+        teachers = get_teachers()
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    ranked = rank_teachers(teachers, request.studentPersona, subject=request.subject)
+
+    # Generate personalized summaries in parallel (or use JSON summary if AI disabled)
+    with ThreadPoolExecutor(max_workers=min(10, max(1, len(ranked)))) as executor:
+        futures = {executor.submit(_generate_personalized_summary, t): i for i, t in enumerate(ranked)}
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                ranked[idx]["summary"] = future.result()
+            except Exception:
+                pass  # keep original summary on error
+
+    return MatchResponse(ranked=ranked)
+
+
+# ── Teacher endpoints ─────────────────────────────────────────────────
+
 @app.get("/api/teachers")
-def list_teachers() -> dict:
-    """Return all teachers (for teacher list / dashboard entry)."""
+def list_teachers(subject: str | None = None) -> dict:
+    """Return all teachers, optionally filtered by subject."""
     teachers = get_teachers()
+    if subject:
+        teachers = [t for t in teachers if t.get("subject", "").lower() == subject.lower()]
     return {"teachers": teachers}
 
 
@@ -445,6 +495,8 @@ def get_teacher(teacher_id: str) -> dict:
     raise HTTPException(status_code=404, detail="Teacher not found")
 
 
+# ── Learn endpoints (study plan, prompts) ─────────────────────────────
+
 @app.post("/api/learn/personalized-summary")
 def learn_personalized_summary(request: LearnPersonalizedSummaryRequest) -> dict:
     """Return the AI-generated personalized summary for this teacher and student (same as on match cards)."""
@@ -495,32 +547,83 @@ def learn_study_plan(request: LearnStudyPlanRequest) -> dict:
     return {"study_plan": plan, "text_prompt": text_prompt}
 
 
-@app.post("/api/match", response_model=MatchResponse)
-def match(request: MatchRequest) -> MatchResponse:
+# ── Voice cloning endpoints ───────────────────────────────────────────
+
+@app.post("/api/voice/clone")
+async def clone_voice(
+    teacher_id: str = Form(...),
+    teacher_name: str = Form(...),
+    audio: UploadFile = File(..., description="Audio (.mp3/.wav/.m4a) or Video (.mp4/.mov/.webm) file"),
+) -> JSONResponse:
     """
-    Rank teachers by compatibility with the given student persona.
-    Optionally filter by subject. Each teacher's summary is replaced with an
-    AI-generated, student-specific summary when OPENAI_API_KEY is set.
+    Upload an audio or video file to clone a teacher's voice via ElevenLabs.
+    - If video: extracts audio first using moviepy, then clones.
+    - If audio: clones directly.
+    Saves voice_id back to teachers.json.
+    """
+    VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".avi", ".mkv"}
+    
+    # Save uploaded file locally
+    suffix = Path(audio.filename or ".mp3").suffix.lower()
+    upload_path = AUDIO_DIR / f"{teacher_id}_upload{suffix}"
+    content = await audio.read()
+    with open(upload_path, "wb") as f:
+        f.write(content)
+
+    try:
+        if suffix in VIDEO_EXTENSIONS:
+            # Video → extract audio → clone
+            result = full_pipeline(str(upload_path), teacher_name, teacher_id)
+            voice_id = result["voice_id"]
+        else:
+            # Audio → clone directly
+            voice_id = clone_teacher_voice(str(upload_path), teacher_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Voice clone failed: {e}")
+
+    # Save voice_id to teachers.json
+    raw = _load_teachers_raw()
+    for t in raw.get("teachers", []):
+        if t["teacher_id"] == teacher_id:
+            t["voice_id"] = voice_id
+            break
+    _save_teachers_raw(raw)
+
+    # Invalidate teachers cache
+    global _teachers_cache
+    _teachers_cache = None
+
+    return JSONResponse(
+        content={"voice_id": voice_id, "teacher_id": teacher_id, "message": "Voice cloned successfully"},
+        status_code=status.HTTP_201_CREATED,
+    )
+
+
+@app.post("/api/voice/generate")
+def generate_audio(request: TTSRequest) -> Response:
+    """
+    Generate speech audio from text using a cloned voice.
+    Returns MP3 audio bytes directly.
     """
     try:
-        teachers = get_teachers()
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        audio_bytes = generate_speech(request.voice_id, request.text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS failed: {e}")
 
-    ranked = rank_teachers(teachers, request.studentPersona, subject=request.subject)
+    return Response(content=audio_bytes, media_type="audio/mpeg")
 
-    # Generate personalized summaries in parallel (or use JSON summary if AI disabled)
-    with ThreadPoolExecutor(max_workers=min(10, max(1, len(ranked)))) as executor:
-        futures = {executor.submit(_generate_personalized_summary, t): i for i, t in enumerate(ranked)}
-        for future in as_completed(futures):
-            idx = futures[future]
-            try:
-                ranked[idx]["summary"] = future.result()
-            except Exception:
-                pass  # keep original summary on error
 
-    return MatchResponse(ranked=ranked)
+@app.get("/api/voice/list")
+def list_voices() -> dict:
+    """List all available ElevenLabs voices."""
+    try:
+        voices = list_cloned_voices()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list voices: {e}")
+    return {"voices": voices}
 
+
+# ── Health check ──────────────────────────────────────────────────────
 
 @app.get("/health")
 def health() -> dict:
