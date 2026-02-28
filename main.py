@@ -17,7 +17,11 @@ from openai import OpenAI
 from pydantic import BaseModel, Field
 
 from matching import load_teachers, rank_teachers
-from voice import clone_teacher_voice, generate_speech, list_cloned_voices, save_audio, extract_audio_from_video, full_pipeline
+
+try:
+    from voice import clone_teacher_voice, generate_speech, list_cloned_voices, save_audio, extract_audio_from_video, full_pipeline
+except ImportError:
+    clone_teacher_voice = generate_speech = list_cloned_voices = save_audio = extract_audio_from_video = full_pipeline = None  # type: ignore
 
 # Same Azure OpenAI setup as output.py (env can override)
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://hesdi-mm4zauz8-eastus2.cognitiveservices.azure.com/openai/v1/")
@@ -236,6 +240,14 @@ class LearnPersonalizedSummaryRequest(BaseModel):
 class TTSRequest(BaseModel):
     voice_id: str = Field(..., description="ElevenLabs voice ID")
     text: str = Field(..., description="Text to convert to speech")
+
+
+class GenerateByTeacherRequest(BaseModel):
+    teacher_id: str = Field(..., description="Teacher ID")
+    text: str = Field(..., description="Text to convert to speech in teacher's voice")
+
+# Max chars for TTS to stay within ElevenLabs limits
+TTS_MAX_TEXT_LENGTH = 4500
 
 
 def _load_students_data() -> dict:
@@ -561,6 +573,11 @@ async def clone_voice(
     - If audio: clones directly.
     Saves voice_id back to teachers.json.
     """
+    if full_pipeline is None or clone_teacher_voice is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Voice cloning unavailable. Install elevenlabs and moviepy: pip install elevenlabs moviepy",
+        )
     VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".avi", ".mkv"}
     
     # Save uploaded file locally
@@ -605,6 +622,11 @@ def generate_audio(request: TTSRequest) -> Response:
     Generate speech audio from text using a cloned voice.
     Returns MP3 audio bytes directly.
     """
+    if generate_speech is None:
+        raise HTTPException(
+            status_code=503,
+            detail="TTS unavailable. Install elevenlabs: pip install elevenlabs",
+        )
     try:
         audio_bytes = generate_speech(request.voice_id, request.text)
     except Exception as e:
@@ -613,9 +635,51 @@ def generate_audio(request: TTSRequest) -> Response:
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
+@app.post("/api/voice/generate-by-teacher")
+def generate_audio_by_teacher(request: GenerateByTeacherRequest) -> Response:
+    """
+    Generate speech audio from text using the given teacher's cloned voice.
+    Returns 400 if the teacher has no voice_id (upload a video first).
+    Text is truncated to TTS_MAX_TEXT_LENGTH characters to stay within API limits.
+    """
+    if generate_speech is None:
+        raise HTTPException(
+            status_code=503,
+            detail="TTS unavailable. Install elevenlabs: pip install elevenlabs",
+        )
+    teachers = get_teachers()
+    teacher = next(
+        (t for t in teachers if (t.get("teacher_id") or "").strip() == request.teacher_id.strip()),
+        None,
+    )
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    voice_id = (teacher.get("voice_id") or "").strip()
+    if not voice_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Teacher has no voice; upload a video first.",
+        )
+    text = (request.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    if len(text) > TTS_MAX_TEXT_LENGTH:
+        text = text[: TTS_MAX_TEXT_LENGTH - 3].rstrip() + "..."
+    try:
+        audio_bytes = generate_speech(voice_id, text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS failed: {e}")
+    return Response(content=audio_bytes, media_type="audio/mpeg")
+
+
 @app.get("/api/voice/list")
 def list_voices() -> dict:
     """List all available ElevenLabs voices."""
+    if list_cloned_voices is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Voice list unavailable. Install elevenlabs: pip install elevenlabs",
+        )
     try:
         voices = list_cloned_voices()
     except Exception as e:

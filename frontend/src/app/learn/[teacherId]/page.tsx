@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { jsPDF } from "jspdf";
@@ -14,6 +14,8 @@ import {
   getModalityPrompts,
   createStudyPlan,
   getPersonalizedSummary,
+  cloneTeacherVoice,
+  generateAudioInTeacherVoice,
   type Teacher,
   type Student,
 } from "@/lib/api";
@@ -41,6 +43,16 @@ export default function LearnPage() {
     video_prompt: string;
   } | null>(null);
   const [promptsLoading, setPromptsLoading] = useState(false);
+
+  const [voiceCloneLoading, setVoiceCloneLoading] = useState(false);
+  const [voiceCloneError, setVoiceCloneError] = useState("");
+  const [voiceCloneSuccess, setVoiceCloneSuccess] = useState(false);
+  const [voiceFile, setVoiceFile] = useState<File | null>(null);
+
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioError, setAudioError] = useState("");
+  const audioUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!teacherId) return;
@@ -108,6 +120,59 @@ export default function LearnPage() {
       setPromptsLoading(false);
     }
   };
+
+  const handleCloneVoice = async () => {
+    if (!teacherId || !teacher || !voiceFile) return;
+    setVoiceCloneLoading(true);
+    setVoiceCloneError("");
+    setVoiceCloneSuccess(false);
+    try {
+      await cloneTeacherVoice(teacherId, teacher.name, voiceFile);
+      const updated = await getTeacher(teacherId);
+      setTeacher(updated);
+      setVoiceCloneSuccess(true);
+      setVoiceFile(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Voice clone failed";
+      const friendly =
+        msg === "Failed to fetch" || msg.includes("NetworkError")
+          ? "Could not reach the API. Make sure the backend is running (e.g. uvicorn on port 8765) and CORS allows this origin."
+          : msg;
+      setVoiceCloneError(friendly);
+    } finally {
+      setVoiceCloneLoading(false);
+    }
+  };
+
+  const handleGenerateAudio = async () => {
+    if (!teacherId || !studyPlan?.trim()) return;
+    setAudioLoading(true);
+    setAudioError("");
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+      setAudioUrl(null);
+    }
+    try {
+      const blob = await generateAudioInTeacherVoice(teacherId, studyPlan);
+      const url = URL.createObjectURL(blob);
+      audioUrlRef.current = url;
+      setAudioUrl(url);
+    } catch (e) {
+      setAudioError(e instanceof Error ? e.message : "Failed to generate audio");
+    } finally {
+      setAudioLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
+    };
+  }, []);
 
   /** Use AI-generated Outline block if present (main sections only); else fall back to filtering out subsection noise. */
   const studyPlanTitles = (() => {
@@ -363,6 +428,59 @@ export default function LearnPage() {
           </CardHeader>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Teacher voice</CardTitle>
+            {teacher.voice_id ? (
+              <p className="text-muted-foreground text-sm">Voice is set. You can generate study-plan audio in this teacher&apos;s voice below.</p>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                Upload a video to extract and clone this teacher&apos;s voice. Audio is extracted from the video and used for text-to-speech.
+              </p>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!teacher.voice_id && (
+              <>
+                <div>
+                  <Label htmlFor="voice-file">Video or audio file</Label>
+                  <Input
+                    id="voice-file"
+                    type="file"
+                    accept=".mp4,.mov,.webm,.mp3,.wav,.m4a"
+                    className="mt-1"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      setVoiceFile(f ?? null);
+                      setVoiceCloneError("");
+                      setVoiceCloneSuccess(false);
+                    }}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleCloneVoice();
+                  }}
+                  disabled={voiceCloneLoading || !voiceFile}
+                  variant="outline"
+                >
+                  {voiceCloneLoading ? "Cloning…" : "Clone voice from video/audio"}
+                </Button>
+                {voiceCloneSuccess && (
+                  <p className="text-sm text-green-600 dark:text-green-400">Voice cloned successfully.</p>
+                )}
+                {voiceCloneError && (
+                  <p className="text-destructive text-sm font-medium" role="alert">
+                    {voiceCloneError}
+                  </p>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
         {!student && (
           <Card>
             <CardContent className="py-8">
@@ -449,6 +567,52 @@ export default function LearnPage() {
                   </div>
                 )}
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Listen in teacher&apos;s voice</CardTitle>
+            {teacher.voice_id ? (
+              <p className="text-muted-foreground text-sm">
+                Generate audio of the study plan in {teacher.name}&apos;s voice (if a voice has been set).
+              </p>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                This teacher doesn&apos;t have a voice yet. Upload a video in the Teacher voice section to enable this feature.
+              </p>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {teacher.voice_id && studyPlan?.trim() && (
+              <>
+                <Button
+                  onClick={handleGenerateAudio}
+                  disabled={audioLoading}
+                  variant="outline"
+                >
+                  {audioLoading ? "Generating…" : `Generate audio in ${teacher.name}'s voice`}
+                </Button>
+                {audioError && (
+                  <p className="text-destructive text-sm">{audioError}</p>
+                )}
+                {audioUrl && (
+                  <div className="space-y-2">
+                    <audio src={audioUrl} controls className="w-full max-w-full" />
+                    <a
+                      href={audioUrl}
+                      download={`study-plan-${teacher.name.replace(/\s+/g, "-")}.mp3`}
+                      className="text-sm text-[var(--tinder-pink)] hover:underline"
+                    >
+                      Download MP3
+                    </a>
+                  </div>
+                )}
+              </>
+            )}
+            {teacher.voice_id && !studyPlan?.trim() && (
+              <p className="text-muted-foreground text-sm">Generate a study plan above to create audio in this teacher&apos;s voice.</p>
             )}
           </CardContent>
         </Card>

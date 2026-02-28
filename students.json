@@ -429,6 +429,39 @@
       },
       "archetype": "Learner profile",
       "summary": "Strong on: visual_dependency, verbal_density, formality. Lower on: context_need, feedback_style. Profile generated from 20-question quiz \u2014 use for teacher matching."
+    },
+    {
+      "student_id": "stu_47aed50f",
+      "name": "Tiya Kumar 4",
+      "generated_at": "2026-02-28T03:21:08.000Z",
+      "persona": {
+        "pace": 0.5,
+        "structure": 0.5,
+        "abstraction": 0.75,
+        "interactivity": 0.5,
+        "visual_dependency": 0.3,
+        "verbal_density": 0.5,
+        "repetition_need": 0.5,
+        "formality": 0.5,
+        "humor_receptivity": 0.5,
+        "feedback_style": 0.5,
+        "autonomy": 0.5,
+        "cognitive_load_tolerance": 0.8,
+        "attention_span": 0.5,
+        "motivation_type": 0.7,
+        "error_tolerance": 0.1,
+        "social_preference": 0.2,
+        "real_world_need": 0.5,
+        "emotional_sensitivity": 0.5,
+        "question_comfort": 0.2,
+        "note_taking_style": 0.7,
+        "challenge_preference": 0.75,
+        "context_need": 0.9,
+        "storytelling_affinity": 0.5,
+        "revision_style": 0.3
+      },
+      "archetype": "Learner profile",
+      "summary": "Strong on: context_need, cognitive_load_tolerance, abstraction. Lower on: question_comfort, error_tolerance. Profile generated from 20-question quiz \u2014 use for teacher matching."
     }
   ]
 }

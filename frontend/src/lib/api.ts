@@ -159,6 +159,44 @@ export async function createStudyPlan(
   return res.json();
 }
 
+export async function cloneTeacherVoice(
+  teacherId: string,
+  teacherName: string,
+  file: File
+): Promise<{ voice_id: string; teacher_id: string }> {
+  const form = new FormData();
+  form.append("teacher_id", teacherId);
+  form.append("teacher_name", teacherName);
+  form.append("audio", file);
+  const res = await fetch(`${API_URL}/api/voice/clone`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const message = (body as { detail?: string }).detail ?? "Voice clone failed";
+    throw new Error(typeof message === "string" ? message : "Voice clone failed");
+  }
+  return res.json();
+}
+
+export async function generateAudioInTeacherVoice(
+  teacherId: string,
+  text: string
+): Promise<Blob> {
+  const res = await fetch(`${API_URL}/api/voice/generate-by-teacher`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teacher_id: teacherId, text }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const message = (body as { detail?: string }).detail ?? "Failed to generate audio";
+    throw new Error(typeof message === "string" ? message : "Failed to generate audio");
+  }
+  return res.blob();
+}
+
 export interface Teacher {
   teacher_id: string;
   name: string;
@@ -167,6 +205,7 @@ export interface Teacher {
   tagline: string;
   summary: string;
   persona: Record<string, number>;
+  voice_id?: string;
 }
 
 export interface Student {

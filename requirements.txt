@@ -2,3 +2,7 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 openai>=1.0.0
 python-dotenv>=1.0.0
+python-multipart>=0.0.6
+# Voice cloning and TTS (optional; main.py handles missing module)
+elevenlabs>=1.0.0
+moviepy>=1.0.3

@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Heart, BarChart3, ThumbsUp, Users, Sparkles, ArrowLeft } from "lucide-react";
+import { Heart, BarChart3, ThumbsUp, Users, Sparkles, ArrowLeft, Mic } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getTeacher, getTeacherInsights, type Teacher, type TeacherInsights } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { getTeacher, getTeacherInsights, cloneTeacherVoice, type Teacher, type TeacherInsights } from "@/lib/api";
 
 function formatDimension(key: string): string {
   return key
@@ -26,6 +29,11 @@ export default function TeacherDashboardPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [voiceCloneLoading, setVoiceCloneLoading] = useState(false);
+  const [voiceCloneError, setVoiceCloneError] = useState("");
+  const [voiceCloneSuccess, setVoiceCloneSuccess] = useState(false);
+  const [voiceFile, setVoiceFile] = useState<File | null>(null);
+
   const load = useCallback(async (id: string) => {
     setLoading(true);
     setError("");
@@ -41,6 +49,30 @@ export default function TeacherDashboardPage({
       setLoading(false);
     }
   }, []);
+
+  const handleCloneVoice = useCallback(async () => {
+    if (!teacherId || !teacher || !voiceFile) return;
+    setVoiceCloneLoading(true);
+    setVoiceCloneError("");
+    setVoiceCloneSuccess(false);
+    try {
+      await cloneTeacherVoice(teacherId, teacher.name, voiceFile);
+      const updated = await getTeacher(teacherId);
+      setTeacher(updated);
+      setVoiceCloneSuccess(true);
+      setVoiceFile(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Voice clone failed";
+      const friendly =
+        msg === "Failed to fetch" || msg.includes("NetworkError")
+          ? "Could not reach the API. Make sure the backend is running (e.g. uvicorn on port 8765) and CORS allows this origin."
+          : msg;
+      setVoiceCloneError(friendly);
+      console.error("Voice clone failed:", e);
+    } finally {
+      setVoiceCloneLoading(false);
+    }
+  }, [teacherId, teacher, voiceFile]);
 
   useEffect(() => {
     let cancelled = false;
@@ -159,6 +191,66 @@ export default function TeacherDashboardPage({
                 </p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Teacher voice: upload video/audio to clone voice for TTS */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Mic className="h-4 w-4 text-[var(--tinder-pink)]" />
+              Your voice
+            </CardTitle>
+            {teacher?.voice_id ? (
+              <p className="text-sm text-muted-foreground">
+                Your voice is set. Students can generate study-plan audio in your voice on your learn page.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Upload a video or audio file to extract and clone your voice. It will be used for text-to-speech when students generate audio from study plans.
+              </p>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!teacher?.voice_id && (
+              <>
+                <div>
+                  <Label htmlFor="dashboard-voice-file">Video or audio file</Label>
+                  <Input
+                    id="dashboard-voice-file"
+                    type="file"
+                    accept=".mp4,.mov,.webm,.mp3,.wav,.m4a"
+                    className="mt-1"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      setVoiceFile(f ?? null);
+                      setVoiceCloneError("");
+                      setVoiceCloneSuccess(false);
+                    }}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleCloneVoice();
+                  }}
+                  disabled={voiceCloneLoading || !voiceFile}
+                  variant="outline"
+                  className="border-[var(--tinder-pink)] text-[var(--tinder-pink)] hover:bg-[var(--tinder-pink)]/10"
+                >
+                  {voiceCloneLoading ? "Cloning…" : "Clone voice from video/audio"}
+                </Button>
+                {voiceCloneSuccess && (
+                  <p className="text-sm text-green-600 dark:text-green-400">Voice cloned successfully.</p>
+                )}
+                {voiceCloneError && (
+                  <p className="text-sm text-destructive font-medium" role="alert">
+                    {voiceCloneError}
+                  </p>
+                )}
+              </>
+            )}
           </CardContent>
         </Card>
 

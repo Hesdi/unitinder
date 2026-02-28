@@ -1,0 +1,7 @@
+{"sessionId":"4a0357","location":"dashboard:onClick","message":"Clone button clicked","data":{"hasVoiceFile":true,"hasTeacher":true,"teacherId":"tch_cs_001"},"timestamp":1772249737578,"hypothesisId":"H1"}
+{"sessionId":"4a0357","location":"dashboard:handleCloneVoice","message":"Handler entered","data":{"teacherId":true,"hasTeacher":true,"hasVoiceFile":true},"timestamp":1772249737580,"hypothesisId":"H2"}
+{"sessionId":"4a0357","location":"api:cloneTeacherVoice","message":"Fetch starting","data":{"teacherId":"tch_cs_001"},"timestamp":1772249737581,"hypothesisId":"H4"}
+{"sessionId": "4a0357", "location": "main:clone_voice", "message": "Endpoint hit", "data": {"teacher_id": "tch_cs_001"}, "timestamp": 1772249737635.975, "hypothesisId": "H5"}
+{"sessionId":"4a0357","location":"api:cloneTeacherVoice","message":"Fetch done","data":{"status":500,"ok":false},"timestamp":1772249737655,"hypothesisId":"H4"}
+{"sessionId":"4a0357","location":"api:cloneTeacherVoice","message":"Response not OK","data":{"status":500,"detail":"Voice clone failed: ELEVENLABS_API_KEY not set in .env"},"timestamp":1772249737656,"hypothesisId":"H4"}
+{"sessionId":"4a0357","location":"dashboard:catch","message":"Clone failed","data":{"msg":"Voice clone failed: ELEVENLABS_API_KEY not set in .env","friendly":"Voice clone failed: ELEVENLABS_API_KEY not set in .env"},"timestamp":1772249737656,"hypothesisId":"H3"}
