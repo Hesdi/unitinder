@@ -1,34 +1,40 @@
 # UniTinder
 
-**Find teachers that match how you learn.** Take a short quiz to build your learning profile, then see your best-matched teachers by subject—and swipe to save your favorites.
+**Stop guessing which teacher fits you. Swipe, match, learn.**
+
+Picking a teacher used to mean picking a subject and hoping for the best. UniTinder changes that: a short quiz learns *how* you learn, then we show you teachers ranked by real compatibility—with explanations, not just scores. Swipe the ones you like, get study plans in their style, and (if you’re a teacher) see who you’re resonating with—anonymized.
+
+---
+
+## Why UniTinder?
+
+- **Learning style, not just subject.** We match on 24 dimensions—pace, structure, interactivity, need for visuals, feedback style, and more—so you see *why* a teacher fits, not just that they teach the class.
+- **No more mismatch.** Get a compatibility score and a short, personalized “why this teacher for you” summary so you know what you’re choosing before you commit.
+- **Swipe to save.** Like Tinder, but for your education: swipe right to save teachers to “My teachers,” then dive into study plans and summaries whenever you’re ready.
+- **Study plans in *their* voice.** Request a topic and get a study plan generated in that teacher’s style—their pacing, tone, and structure—so it feels like learning from them, not from a generic bot.
+- **Teachers get insights too.** See who tends to like you (archetypes, alignment traits)—anonymized, no names—so you understand your “audience” and can improve.
+
+---
+
+## What makes UniTinder different
+
+Other tools match you to courses or subjects. UniTinder matches you to **teaching styles**. We don’t just say “here are Analysis teachers”—we say “here are Analysis teachers ranked by how well their style fits *your* profile,” with clear reasons and the option to learn from them via AI-generated study plans. For teachers, we add anonymized dashboards so you see which kinds of learners you attract. It’s matching built for how people actually learn and teach.
 
 ---
 
 ## Try it
 
 - **Live app:** [Add your Vercel URL here after deploy] — open in any browser.
-- **On your phone:** Scan the QR code (generated from the live URL) to try UniTinder on mobile—no app install needed.
-
----
-
-## What you can do
-
-- **Take the quiz** — Answer ~20 questions to build your learning profile (pace, structure, interactivity, and more).
-- **Match with teachers** — Pick a subject and see teachers ranked by fit. Each card shows a compatibility score and a short explanation of why they match (or don’t).
-- **Swipe** — Swipe right to like, left to pass. Liked teachers are saved under **My teachers**.
-- **Learn** — Open a teacher and request a **study plan** for any topic; it’s generated in that teacher’s style. You’ll also see a personalized summary for you and that teacher.
-- **Teacher view** — Use **“I’m a teacher”** to open the teacher list and a dashboard with anonymized insights (who tends to like you, which traits align).
+- **On your phone:** Scan the QR code (from the live URL) to try UniTinder on mobile—no app install needed.
 
 ---
 
 ## Deploy on Vercel (frontend only)
 
-1. **Import the repo** in Vercel and set **Root Directory** to `frontend` (not the repo root).
-2. **Turn off “Include source files outside of Root Directory”**  
-   Project Settings → General → Root Directory → **uncheck** “Include source files outside of Root Directory”.  
-   If this is on, Vercel sees the Python backend and tries to build it, which causes errors like “no FastAPI entry point found”. The frontend does not need the backend files.
-3. **Teachers work without a backend:** the app ships with `frontend/public/teachers.json`, so the Teachers list and Learn page (static summary) work on Vercel with no extra setup.
-4. **Optional – Match, likes, study plans:** for the quiz → match flow, saved likes, and AI study plans, deploy the backend (see [DEPLOY.md](./DEPLOY.md)) and set `NEXT_PUBLIC_API_URL` in Vercel. Without this, the deployed app will show “No teacher data available” because it tries to call `localhost:8765` from the user’s browser.
+1. **Import the repo** in Vercel and set **Root Directory** to `frontend`.
+2. **Turn off** “Include source files outside of Root Directory” in Project Settings → General so Vercel doesn’t try to build the Python backend.
+3. **Teachers work without a backend:** the app ships with `frontend/public/teachers.json`, so the Teachers list and Learn page (static summary) work with no extra setup.
+4. **Optional—Match, likes, study plans:** deploy the backend (see [DEPLOY.md](./DEPLOY.md)) and set `NEXT_PUBLIC_API_URL` in Vercel for the full quiz → match → study plan flow.
 5. Deploy. Your app will be at e.g. `https://unitinder-xxx.vercel.app`.
 
 ---
