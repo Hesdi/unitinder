@@ -21,6 +21,17 @@
 
 ---
 
+## Deploy on Vercel (frontend only)
+
+1. **Import the repo** in Vercel and set **Root Directory** to `frontend` (not the repo root).
+2. **Turn off “Include source files outside of Root Directory”**  
+   Project Settings → General → Root Directory → **uncheck** “Include source files outside of Root Directory”.  
+   If this is on, Vercel sees the Python backend and tries to build it, which causes errors like “no FastAPI entry point found”. The frontend does not need the backend files.
+3. **Environment variable:** add `NEXT_PUBLIC_API_URL` = your backend URL (e.g. `https://your-api.railway.app`). The backend runs elsewhere (Railway, Render, etc.); set `OPENAI_API_KEY` there, not in Vercel.
+4. Deploy. Your app will be at e.g. `https://unitinder-xxx.vercel.app`.
+
+---
+
 ## Run it yourself
 
 **Backend (API)** — from the repo root:
