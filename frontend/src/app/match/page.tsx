@@ -2,59 +2,43 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import TinderCard from "react-tinder-card";
+import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { CardSpotlight } from "@/components/ui/aceternity/card-spotlight";
+import { SwipeStack } from "@/components/swipe-stack";
 import {
-  getStudents,
   matchTeachers,
+  addLikedTeacher,
   SUBJECTS,
-  type Student,
   type RankedTeacher,
 } from "@/lib/api";
+import { getCurrentStudent } from "@/lib/current-student";
+import type { Student } from "@/lib/api";
 
 export default function MatchPage() {
-  const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [studentId, setStudentId] = useState("");
+  const [student, setStudent] = useState<Student | null>(null);
   const [subject, setSubject] = useState("");
   const [ranked, setRanked] = useState<RankedTeacher[] | null>(null);
   const [remainingTeachers, setRemainingTeachers] = useState<RankedTeacher[]>([]);
   const [matching, setMatching] = useState(false);
   const [error, setError] = useState("");
-  const [swipeOverlay, setSwipeOverlay] = useState<{
-    teacherId: string;
-    direction: "left" | "right";
-  } | null>(null);
 
   useEffect(() => {
-    getStudents()
-      .then((data) => {
-        setStudents(data.students);
-        if (data.students.length > 0 && !studentId)
-          setStudentId(data.students[0].student_id);
-        if (!subject) setSubject(SUBJECTS[0]);
-      })
-      .catch((e) =>
-        setError(e instanceof Error ? e.message : "Failed to load students")
-      )
-      .finally(() => setLoading(false));
-  }, [studentId, subject]);
-
-  const selectedStudent = students.find((s) => s.student_id === studentId);
+    setStudent(getCurrentStudent());
+    setSubject(SUBJECTS[0]);
+  }, []);
 
   const handleMatch = async () => {
-    if (!selectedStudent) return;
+    if (!student) return;
     setError("");
     setMatching(true);
     setRanked(null);
     setRemainingTeachers([]);
     try {
       const data = await matchTeachers({
-        studentPersona: selectedStudent.persona,
+        studentPersona: student.persona,
         subject: subject || null,
       });
       setRanked(data.ranked);
@@ -68,16 +52,12 @@ export default function MatchPage() {
     }
   };
 
-  const handleSwipe = useCallback((teacherId: string, direction: string) => {
-    if (direction === "left" || direction === "right") {
-      setSwipeOverlay({ teacherId, direction });
+  const handleSwipe = useCallback((teacherId: string, direction: "left" | "right") => {
+    if (direction === "right" && student) {
+      addLikedTeacher(student.student_id, teacherId).catch(() => {});
     }
-  }, []);
-
-  const handleCardLeftScreen = useCallback((teacherId: string) => {
     setRemainingTeachers((prev) => prev.filter((t) => t.teacher_id !== teacherId));
-    setSwipeOverlay(null);
-  }, []);
+  }, [student]);
 
   const handleMatchAgain = () => {
     setRanked(null);
@@ -86,64 +66,67 @@ export default function MatchPage() {
 
   const showSwipeStack = ranked && ranked.length > 0;
   const noCardsLeft = showSwipeStack && remainingTeachers.length === 0;
+  const noStudent = student === null;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-4 py-4 sm:px-6">
-        <Link href="/" className="text-xl font-semibold">
-          Unitinder
-        </Link>
-        <Badge variant="secondary" className="ml-3 rounded-full">
-          Match
-        </Badge>
+      <header
+        className="border-b border-border px-4 py-4 sm:px-6"
+        style={{ background: "var(--tinder-gradient)" }}
+      >
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center">
+            <Link
+              href="/"
+              className="flex items-center gap-1.5 text-xl font-semibold text-white drop-shadow-sm"
+            >
+              <Heart className="h-6 w-6 fill-white" />
+              Unitinder
+            </Link>
+            <Badge
+              variant="secondary"
+              className="ml-3 rounded-full bg-white/20 text-white border-0"
+            >
+              Match
+            </Badge>
+          </div>
+          <Link
+            href="/saved"
+            className="text-sm font-medium text-white/90 hover:text-white"
+          >
+            My teachers
+          </Link>
+        </div>
       </header>
       <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
         <h1 className="mb-6 text-2xl font-semibold">Match with teachers</h1>
 
-        {loading && (
-          <p className="text-muted-foreground text-sm">Loading students…</p>
-        )}
         {error && (
           <p className="text-destructive mb-4 text-sm">{error}</p>
         )}
 
-        {!loading && students.length === 0 && (
+        {noStudent && (
           <Card>
             <CardContent className="py-8">
               <p className="text-muted-foreground">
-                No students yet. Take the quiz to add your profile, then come
-                back here.
+                Take the quiz first to get your learning profile, then come back here.
               </p>
-              <Button asChild className="mt-4">
+              <Button asChild className="mt-4 bg-[var(--tinder-pink)] text-white hover:opacity-90">
                 <Link href="/quiz">Take the quiz</Link>
               </Button>
             </CardContent>
           </Card>
         )}
 
-        {!loading && students.length > 0 && !showSwipeStack && (
+        {student && !showSwipeStack && (
           <div className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">
-                  Choose student and subject
+                  Choose subject
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <Label>Student</Label>
-                  <select
-                    value={studentId}
-                    onChange={(e) => setStudentId(e.target.value)}
-                    className="mt-1 flex h-9 w-full max-w-xs items-center justify-between rounded-2xl border border-input bg-transparent px-3 py-2 text-sm"
-                  >
-                    {students.map((s) => (
-                      <option key={s.student_id} value={s.student_id}>
-                        {s.name} ({s.student_id})
-                      </option>
-                    ))}
-                  </select>
-                </div>
                 <div>
                   <Label>Subject</Label>
                   <select
@@ -161,7 +144,8 @@ export default function MatchPage() {
                 <Button
                   onClick={handleMatch}
                   disabled={matching}
-                  className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
+                  className="bg-[var(--tinder-pink)] text-white hover:opacity-90"
+                  style={{ background: "var(--tinder-gradient)" }}
                 >
                   {matching ? "Matching…" : "Find teachers"}
                 </Button>
@@ -177,66 +161,12 @@ export default function MatchPage() {
         )}
 
         {showSwipeStack && remainingTeachers.length > 0 && (
-          <div className="relative mx-auto h-[520px] w-full max-w-sm">
-            {[...remainingTeachers].reverse().map((teacher) => (
-              <TinderCard
-                key={teacher.teacher_id}
-                onSwipe={(dir) => handleSwipe(teacher.teacher_id, dir)}
-                onCardLeftScreen={() =>
-                  handleCardLeftScreen(teacher.teacher_id)
-                }
-                preventSwipe={["up", "down"]}
-                className="absolute h-full w-full"
-              >
-                <div className="relative h-full w-full">
-                  <CardSpotlight
-                    color="var(--gradient-lavender)"
-                    radius={280}
-                    className="h-full border-0 bg-card shadow-md"
-                  >
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">
-                        {teacher.name} · {teacher.subject}
-                      </CardTitle>
-                      <p className="text-muted-foreground text-sm">
-                        Score: {teacher.compatibility_score} · {teacher.archetype}
-                      </p>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      <p className="text-muted-foreground italic">
-                        {teacher.tagline}
-                      </p>
-                      <p>{teacher.summary}</p>
-                      <Button asChild variant="outline" size="sm" className="mt-3 w-full">
-                        <Link
-                          href={
-                            studentId
-                              ? `/learn/${teacher.teacher_id}?studentId=${studentId}`
-                              : `/learn/${teacher.teacher_id}`
-                          }
-                        >
-                          Learn more
-                        </Link>
-                      </Button>
-                    </CardContent>
-                  </CardSpotlight>
-                  {swipeOverlay?.teacherId === teacher.teacher_id && (
-                    <div
-                      className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl text-2xl font-bold"
-                      style={{
-                        backgroundColor:
-                          swipeOverlay.direction === "right"
-                            ? "rgba(34, 197, 94, 0.85)"
-                            : "rgba(239, 68, 68, 0.85)",
-                        color: "white",
-                      }}
-                    >
-                      {swipeOverlay.direction === "right" ? "MATCH ✓" : "SKIP ✗"}
-                    </div>
-                  )}
-                </div>
-              </TinderCard>
-            ))}
+          <div className="flex flex-col items-center justify-center">
+            <SwipeStack
+              teachers={remainingTeachers}
+              studentId={student?.student_id ?? null}
+              onSwipe={handleSwipe}
+            />
           </div>
         )}
 
@@ -248,7 +178,8 @@ export default function MatchPage() {
               </p>
               <Button
                 onClick={handleMatchAgain}
-                className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
+                className="text-white hover:opacity-90"
+                style={{ background: "var(--tinder-gradient)" }}
               >
                 Match again
               </Button>

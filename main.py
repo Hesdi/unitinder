@@ -43,6 +43,7 @@ app.add_middleware(
 BASE_DIR = Path(__file__).resolve().parent
 TEACHERS_PATH = Path(os.environ["UNITINDER_TEACHERS_PATH"]) if os.environ.get("UNITINDER_TEACHERS_PATH") else BASE_DIR / "teachers.json"
 STUDENTS_PATH = Path(os.environ["UNITINDER_STUDENTS_PATH"]) if os.environ.get("UNITINDER_STUDENTS_PATH") else BASE_DIR / "students.json"
+LIKES_PATH = Path(os.environ["UNITINDER_LIKES_PATH"]) if os.environ.get("UNITINDER_LIKES_PATH") else BASE_DIR / "likes.json"
 _teachers_cache: list | None = None
 
 
@@ -255,6 +256,29 @@ def _save_students_data(data: dict) -> None:
         json.dump(data, f, indent=2)
 
 
+def _load_likes_data() -> dict:
+    """Load likes.json; return { student_id: [teacher_id, ...], ... }. Empty dict if missing or on error."""
+    if not LIKES_PATH.exists():
+        return {}
+    try:
+        with open(LIKES_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_likes_data(data: dict) -> None:
+    """Write likes.json. Creates parent dirs if needed."""
+    LIKES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(LIKES_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+class AddLikeRequest(BaseModel):
+    teacher_id: str = Field(..., description="Teacher ID to add to this student's liked list")
+
+
 @app.get("/api/students")
 def get_students() -> dict:
     """Return all students from students.json."""
@@ -282,6 +306,50 @@ def create_student(request: CreateStudentRequest) -> JSONResponse:
     data["students"].append(student)
     _save_students_data(data)
     return JSONResponse(content=student, status_code=status.HTTP_201_CREATED)
+
+
+@app.get("/api/students/{student_id}/likes")
+def get_student_likes(student_id: str) -> dict:
+    """Return full teacher objects for all teachers liked by this student. Order preserved."""
+    data = _load_likes_data()
+    teacher_ids = data.get(student_id) or []
+    if not teacher_ids:
+        return {"teachers": []}
+    teachers = get_teachers()
+    id_to_teacher = {(t.get("teacher_id") or "").strip(): t for t in teachers}
+    result = []
+    for tid in teacher_ids:
+        t = id_to_teacher.get((tid or "").strip())
+        if t is not None:
+            result.append(t)
+    return {"teachers": result}
+
+
+@app.post("/api/students/{student_id}/likes")
+def add_student_like(student_id: str, request: AddLikeRequest) -> dict:
+    """Add a teacher to this student's liked list. Idempotent."""
+    tid = (request.teacher_id or "").strip()
+    if not tid:
+        raise HTTPException(status_code=400, detail="teacher_id is required")
+    data = _load_likes_data()
+    if student_id not in data:
+        data[student_id] = []
+    if tid not in data[student_id]:
+        data[student_id].append(tid)
+    _save_likes_data(data)
+    return {"teachers": data[student_id]}
+
+
+@app.delete("/api/students/{student_id}/likes/{teacher_id}")
+def remove_student_like(student_id: str, teacher_id: str) -> dict:
+    """Remove a teacher from this student's liked list."""
+    tid = (teacher_id or "").strip()
+    data = _load_likes_data()
+    if student_id not in data:
+        return {"teachers": []}
+    data[student_id] = [x for x in data[student_id] if (x or "").strip() != tid]
+    _save_likes_data(data)
+    return {"teachers": data[student_id]}
 
 
 @app.get("/api/teachers/{teacher_id}")
@@ -328,9 +396,19 @@ def learn_study_plan(request: LearnStudyPlanRequest) -> dict:
     teacher = next((t for t in teachers if (t.get("teacher_id") or "").strip() == request.teacherId.strip()), None)
     if not teacher:
         raise HTTPException(status_code=404, detail="Teacher not found")
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail="OPENAI_API_KEY is not set. Add it to .env and restart the API.",
+        )
     prompts = _generate_modality_prompts(teacher)
     text_prompt = prompts.get("text_prompt", "")
     plan = _generate_study_plan(teacher, request.studentPersona, request.topic, text_prompt)
+    if not (plan or "").strip():
+        raise HTTPException(
+            status_code=503,
+            detail="Study plan could not be generated. Check OPENAI_API_KEY and API availability.",
+        )
     return {"study_plan": plan, "text_prompt": text_prompt}
 
 

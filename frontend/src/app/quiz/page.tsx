@@ -13,6 +13,7 @@ import { QUESTIONS } from "@/data/questions";
 import { DIMENSION_KEYS } from "@/data/questions";
 import { aggregatePersona, deriveArchetypeAndSummary } from "@/lib/quiz";
 import { createStudent } from "@/lib/api";
+import { setCurrentStudent } from "@/lib/current-student";
 
 export default function QuizPage() {
   const [step, setStep] = useState<"name" | "questions" | "saving" | "done" | "error">("name");
@@ -54,12 +55,13 @@ export default function QuizPage() {
     const { archetype, summary } = deriveArchetypeAndSummary(persona);
 
     try {
-      await createStudent({
+      const student = await createStudent({
         name: (name || "Student").trim() || "Student",
         persona,
         archetype,
         summary,
       });
+      setCurrentStudent(student);
       setStep("done");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save. Is the API running?");
@@ -72,13 +74,15 @@ export default function QuizPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-4 py-4 sm:px-6">
-        <Link href="/" className="text-xl font-semibold">
-          Unitinder
-        </Link>
-        <Badge variant="secondary" className="ml-3 rounded-full">
-          Quiz
-        </Badge>
+      <header className="border-b border-border px-4 py-4 sm:px-6" style={{ background: "var(--tinder-gradient)" }}>
+        <div className="flex items-center">
+          <Link href="/" className="text-xl font-semibold text-white drop-shadow-sm">
+            Unitinder
+          </Link>
+          <Badge variant="secondary" className="ml-3 rounded-full bg-white/20 text-white border-0">
+            Quiz
+          </Badge>
+        </div>
       </header>
       <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
         <AnimatePresence mode="wait">
@@ -110,7 +114,8 @@ export default function QuizPage() {
               </div>
               <Button
                 onClick={handleStart}
-                className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
+                className="text-white hover:opacity-90"
+                style={{ background: "var(--tinder-gradient)" }}
               >
                 Start quiz
               </Button>
@@ -163,7 +168,8 @@ export default function QuizPage() {
               <Button
                 onClick={handleSubmit}
                 disabled={!allAnswered}
-                className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
+                className="text-white hover:opacity-90"
+                style={{ background: "var(--tinder-gradient)" }}
               >
                 Submit and save to students
               </Button>
@@ -206,7 +212,8 @@ export default function QuizPage() {
             <CardContent>
               <Button
                 asChild
-                className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
+                className="text-white hover:opacity-90"
+                style={{ background: "var(--tinder-gradient)" }}
               >
                 <Link href="/match">Match with teachers</Link>
               </Button>

@@ -40,6 +40,29 @@ export async function getTeacher(teacherId: string): Promise<Teacher> {
   return res.json();
 }
 
+export async function getLikedTeachers(studentId: string): Promise<{ teachers: Teacher[] }> {
+  const res = await fetch(`${API_URL}/api/students/${encodeURIComponent(studentId)}/likes`);
+  if (!res.ok) throw new Error("Failed to fetch liked teachers");
+  return res.json();
+}
+
+export async function addLikedTeacher(studentId: string, teacherId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/students/${encodeURIComponent(studentId)}/likes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teacher_id: teacherId }),
+  });
+  if (!res.ok) throw new Error("Failed to add liked teacher");
+}
+
+export async function removeLikedTeacher(studentId: string, teacherId: string): Promise<void> {
+  const res = await fetch(
+    `${API_URL}/api/students/${encodeURIComponent(studentId)}/likes/${encodeURIComponent(teacherId)}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) throw new Error("Failed to remove liked teacher");
+}
+
 export async function getPersonalizedSummary(
   teacherId: string,
   studentPersona: Record<string, number>
@@ -77,7 +100,11 @@ export async function createStudyPlan(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ teacherId, studentPersona, topic }),
   });
-  if (!res.ok) throw new Error("Failed to create study plan");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const message = (body as { detail?: string }).detail ?? "Failed to create study plan";
+    throw new Error(typeof message === "string" ? message : "Failed to create study plan");
+  }
   return res.json();
 }
 

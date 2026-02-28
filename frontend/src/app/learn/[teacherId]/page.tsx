@@ -1,28 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { jsPDF } from "jspdf";
+import { marked } from "marked";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   getTeacher,
-  getStudents,
   getModalityPrompts,
   createStudyPlan,
   getPersonalizedSummary,
   type Teacher,
   type Student,
 } from "@/lib/api";
+import { getCurrentStudent } from "@/lib/current-student";
 
 export default function LearnPage() {
   const params = useParams();
-  const searchParams = useSearchParams();
   const teacherId = params?.teacherId as string;
-  const studentId = searchParams?.get("studentId") ?? null;
 
   const [teacher, setTeacher] = useState<Teacher | null>(null);
   const [student, setStudent] = useState<Student | null>(null);
@@ -31,6 +30,7 @@ export default function LearnPage() {
 
   const [topic, setTopic] = useState("");
   const [studyPlan, setStudyPlan] = useState("");
+  const [studyPlanError, setStudyPlanError] = useState("");
   const [studyPlanLoading, setStudyPlanLoading] = useState(false);
   const [personalizedSummary, setPersonalizedSummary] = useState<string | null>(null);
   const [personalizedSummaryLoading, setPersonalizedSummaryLoading] = useState(false);
@@ -51,12 +51,8 @@ export default function LearnPage() {
   }, [teacherId]);
 
   useEffect(() => {
-    if (!studentId || !teacher) return;
-    getStudents()
-      .then(({ students }) => students.find((s) => s.student_id === studentId) ?? null)
-      .then(setStudent)
-      .catch(() => setStudent(null));
-  }, [studentId, teacher]);
+    setStudent(getCurrentStudent());
+  }, []);
 
   useEffect(() => {
     if (!teacherId || !student?.persona) {
@@ -82,11 +78,16 @@ export default function LearnPage() {
     const persona = student?.persona ?? {};
     setStudyPlanLoading(true);
     setStudyPlan("");
+    setStudyPlanError("");
     try {
       const { study_plan } = await createStudyPlan(teacherId, persona, topic.trim());
-      setStudyPlan(study_plan || "No plan generated. Check that the API key is set.");
+      if (study_plan?.trim()) {
+        setStudyPlan(study_plan);
+      } else {
+        setStudyPlanError("No plan generated. Check that the API key is set.");
+      }
     } catch (e) {
-      setStudyPlan(
+      setStudyPlanError(
         e instanceof Error ? e.message : "Failed to generate study plan. Is the API running?"
       );
     } finally {
@@ -141,47 +142,175 @@ export default function LearnPage() {
   const stripForPdf = (text: string) =>
     text.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}]/gu, "").replace(/\s+/g, " ").trim();
 
-  const handleDownloadPdf = () => {
-    if (!studyPlan || !teacher || !topic.trim()) return;
-    const doc = new jsPDF();
+  /** Convert markdown to plain text (strip #, **, *, [](), `, list markers). */
+  const markdownToPlainText = (md: string): string =>
+    md
+      .split(/\r?\n/)
+      .map((line) => {
+        let s = line.replace(/^#+\s*/, "").trim();
+        s = s.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*(.+?)\*/g, "$1").replace(/__(.+?)__/g, "$1").replace(/_(.+?)_/g, "$1");
+        s = s.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1");
+        s = s.replace(/`([^`]*)`/g, "$1");
+        s = s.replace(/^\s*[-*]\s+/, "").replace(/^\s*\d+\.\s+/, "");
+        return stripForPdf(s);
+      })
+      .join("\n");
+
+  /** Strip inline markdown for one line (links, backticks); keep ** for formatted PDF. */
+  const stripInlineForFormattedPdf = (line: string): string => {
+    let s = stripForPdf(line);
+    s = s.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1");
+    return s.replace(/`([^`]*)`/g, "$1");
+  };
+
+  /** Formatted study plan HTML for UI preview (matches PDF rendering). */
+  const studyPlanHtml = useMemo(() => {
+    if (!studyPlan?.trim()) return "";
+    try {
+      const clean = studyPlan.split(/\r?\n/).map((line) => stripForPdf(line)).join("\n");
+      return marked.parse(clean, { async: false }) as string;
+    } catch {
+      return "";
+    }
+  }, [studyPlan]);
+
+  const slug = topic.trim().replace(/[^a-z0-9]+/gi, "-").slice(0, 40) || "study-plan";
+
+  /** Write a line that may contain **bold** to the PDF with wrapping and page breaks. Returns new y. */
+  const writeFormattedLine = (
+    doc: jsPDF,
+    line: string,
+    opts: { margin: number; maxWidth: number; lineHeight: number; pageHeight: number; baseFontSize: number },
+    startY: number
+  ): number => {
+    const { margin, maxWidth, lineHeight, pageHeight, baseFontSize } = opts;
+    let y = startY;
+    const ensureSpace = () => {
+      if (y > pageHeight - margin - lineHeight) {
+        doc.addPage();
+        y = margin;
+      }
+    };
+    const segments: { text: string; bold: boolean }[] = [];
+    const parts = line.split(/\*\*(.+?)\*\*/g);
+    for (let i = 0; i < parts.length; i++) segments.push({ text: parts[i], bold: i % 2 === 1 });
+    let x = margin;
+    doc.setFontSize(baseFontSize);
+    for (const seg of segments) {
+      doc.setFont("helvetica", seg.bold ? "bold" : "normal");
+      const availableWidth = maxWidth - (x - margin);
+      const sublines = doc.splitTextToSize(seg.text, availableWidth);
+      for (let i = 0; i < sublines.length; i++) {
+        ensureSpace();
+        if (i > 0) {
+          y += lineHeight;
+          x = margin;
+        }
+        doc.text(sublines[i], x, y);
+        x += doc.getTextWidth(sublines[i]);
+      }
+    }
+    return y + lineHeight;
+  };
+
+  /** Formatted PDF with headers, list indent, and bold (avoids html2canvas lab() issue). */
+  const fallbackPlainTextPdf = (doc: jsPDF, teacherData: Teacher, topicText: string) => {
     const margin = 20;
+    const listIndent = 8;
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const maxWidth = pageWidth - margin * 2;
     const lineHeight = 6;
     let y = margin;
 
-    doc.setFontSize(18);
-    doc.text("Study Plan", margin, y);
-    y += lineHeight * 2;
-
-    doc.setFontSize(11);
-    doc.text(stripForPdf(`${teacher.name} · ${teacher.subject}`), margin, y);
-    y += lineHeight;
-    doc.text(stripForPdf(`Topic: ${topic.trim()}`), margin, y);
-    y += lineHeight * 2;
-
-    doc.setFontSize(10);
-    const cleanPlan = studyPlan.split(/\r?\n/).map((line) => stripForPdf(line)).join("\n");
-    const lines = doc.splitTextToSize(cleanPlan, maxWidth);
-    for (let i = 0; i < lines.length; i++) {
+    const ensureSpace = () => {
       if (y > pageHeight - margin - lineHeight) {
         doc.addPage();
         y = margin;
       }
-      doc.text(lines[i], margin, y);
-      y += lineHeight;
+    };
+
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("Study Plan", margin, y);
+    y += lineHeight * 2;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text(stripForPdf(`${teacherData.name} · ${teacherData.subject}`), margin, y);
+    y += lineHeight;
+    doc.text(stripForPdf(`Topic: ${topicText.trim()}`), margin, y);
+    y += lineHeight * 2;
+
+    doc.setFontSize(10);
+    const lines = studyPlan.split(/\r?\n/);
+
+    for (const raw of lines) {
+      const line = stripInlineForFormattedPdf(raw);
+      const trimmed = line.trim();
+      if (!trimmed) {
+        y += lineHeight;
+        continue;
+      }
+      ensureSpace();
+
+      const headerMatch = trimmed.match(/^(#+)\s+(.*)$/);
+      if (headerMatch) {
+        const level = headerMatch[1].length;
+        const title = headerMatch[2].replace(/\*\*(.+?)\*\*/g, "$1").trim();
+        const size = level === 1 ? 14 : level === 2 ? 12 : 10;
+        doc.setFontSize(size);
+        doc.setFont("helvetica", "bold");
+        const titleLines = doc.splitTextToSize(title, maxWidth);
+        for (const ln of titleLines) {
+          ensureSpace();
+          doc.text(ln, margin, y);
+          y += lineHeight;
+        }
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        y += lineHeight * 0.5;
+        continue;
+      }
+
+      const listMatch = trimmed.match(/^\s*([-*]|\d+\.)\s+(.*)$/);
+      if (listMatch) {
+        const bullet = "• ";
+        const content = listMatch[2];
+        doc.setFont("helvetica", "normal");
+        const contentLines = doc.splitTextToSize(content.replace(/\*\*(.+?)\*\*/g, "$1"), maxWidth - listIndent - doc.getTextWidth(bullet));
+        for (let i = 0; i < contentLines.length; i++) {
+          ensureSpace();
+          doc.text(i === 0 ? bullet + contentLines[i] : contentLines[i], margin + (i === 0 ? 0 : listIndent), y);
+          y += lineHeight;
+        }
+        continue;
+      }
+
+      y = writeFormattedLine(
+        doc,
+        line,
+        { margin, maxWidth, lineHeight, pageHeight, baseFontSize: 10 },
+        y
+      );
     }
 
-    const slug = topic.trim().replace(/[^a-z0-9]+/gi, "-").slice(0, 40) || "study-plan";
     doc.save(`study-plan-${slug}.pdf`);
+  };
+
+  const handleDownloadPdf = () => {
+    if (!studyPlan || !teacher || !topic.trim()) return;
+    const doc = new jsPDF();
+    // Use plain-text PDF only: html2canvas (used by doc.html()) does not support modern CSS
+    // color functions like lab(), so rendering HTML causes "Attempting to parse an unsupported
+    // color function 'lab'" when the page uses Tailwind v4 or similar.
+    fallbackPlainTextPdf(doc, teacher, topic.trim());
   };
 
   if (loading || !teacher) {
     return (
       <div className="min-h-screen bg-background text-foreground">
-        <header className="border-b border-border px-4 py-4 sm:px-6">
-          <Link href="/match" className="text-xl font-semibold">
+        <header className="border-b border-border px-4 py-4 sm:px-6" style={{ background: "var(--tinder-gradient)" }}>
+          <Link href="/match" className="text-xl font-semibold text-white drop-shadow-sm">
             Unitinder
           </Link>
         </header>
@@ -198,11 +327,11 @@ export default function LearnPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-4 py-4 sm:px-6">
-        <Link href="/match" className="text-xl font-semibold">
+      <header className="border-b border-border px-4 py-4 sm:px-6" style={{ background: "var(--tinder-gradient)" }}>
+        <Link href="/match" className="text-xl font-semibold text-white drop-shadow-sm">
           Unitinder
         </Link>
-        <span className="ml-3 text-muted-foreground">Learn more</span>
+        <span className="ml-3 text-white/80">Learn more</span>
       </header>
       <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6 space-y-8">
         {error && (
@@ -221,9 +350,9 @@ export default function LearnPage() {
                 ? "Loading personalized summary…"
                 : personalizedSummary ?? teacher.summary}
             </p>
-            {studentId && !student && (
-              <p className="text-muted-foreground text-xs">
-                Could not load student profile. Select a student on Match and use Learn more to see a personalized summary.
+            {!student && (
+              <p className="text-muted-foreground text-sm">
+                Take the quiz first to see a personalized summary for your learning profile.
               </p>
             )}
             {student && (
@@ -234,11 +363,24 @@ export default function LearnPage() {
           </CardHeader>
         </Card>
 
+        {!student && (
+          <Card>
+            <CardContent className="py-8">
+              <p className="text-muted-foreground">
+                Take the quiz first to get your learning profile and see personalized summaries and study plans.
+              </p>
+              <Button asChild className="mt-4 bg-[var(--tinder-pink)] text-white hover:opacity-90">
+                <Link href="/quiz">Take the quiz</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Study plan</CardTitle>
             <p className="text-muted-foreground text-sm">
-              Get a study plan in this teacher&apos;s style. Optionally select a student on the Match page and use &quot;Learn more&quot; to personalize.
+              Get a study plan in this teacher&apos;s style. Your profile from the quiz is used to personalize the plan.
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -254,11 +396,17 @@ export default function LearnPage() {
             </div>
             <Button
               onClick={handleGenerateStudyPlan}
-              disabled={studyPlanLoading || !topic.trim()}
-              className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
+              disabled={studyPlanLoading || !topic.trim() || !student}
+              className="text-white hover:opacity-90"
+              style={{ background: "var(--tinder-gradient)" }}
             >
               {studyPlanLoading ? "Generating…" : "Generate study plan"}
             </Button>
+            {studyPlanError && (
+              <p className="text-destructive text-sm">
+                {studyPlanError}
+              </p>
+            )}
             {studyPlan && (
               <div className="space-y-4">
                 <Button
@@ -287,6 +435,17 @@ export default function LearnPage() {
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+                {studyPlanHtml && (
+                  <div className="rounded-lg border border-border bg-muted/20 px-4 py-3">
+                    <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Full guide
+                    </p>
+                    <div
+                      className="study-plan-preview max-h-[480px] overflow-y-auto text-sm text-foreground [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mb-1.5 [&_h2]:mt-3 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-2 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:my-2 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-0.5 [&_strong]:font-bold"
+                      dangerouslySetInnerHTML={{ __html: studyPlanHtml }}
+                    />
                   </div>
                 )}
               </div>
@@ -334,7 +493,7 @@ export default function LearnPage() {
           </CardContent>
         </Card>
 
-        <Button asChild variant="outline">
+        <Button asChild variant="outline" className="border-[var(--tinder-pink)] text-[var(--tinder-pink)] hover:bg-[var(--tinder-pink)]/10">
           <Link href="/match">Back to matching</Link>
         </Button>
       </main>

@@ -14,6 +14,10 @@
   --color-coral: #ff6b6b;
   --color-pink: #ff8e9e;
   --color-lavender: #c7b8ea;
+  --color-tinder-pink: #FE3C72;
+  --color-tinder-coral: #FF655B;
+  --color-tinder-like: #00E676;
+  --color-tinder-nope: #FF4757;
   --shadow-soft: 0 4px 6px -1px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.04);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -58,6 +62,12 @@
   --gradient-coral: #ff6b6b;
   --gradient-pink: #ff8e9e;
   --gradient-lavender: #c7b8ea;
+  /* Tinder theme */
+  --tinder-pink: #FE3C72;
+  --tinder-coral: #FF655B;
+  --tinder-like: #00E676;
+  --tinder-nope: #FF4757;
+  --tinder-gradient: linear-gradient(135deg, var(--tinder-pink) 0%, var(--tinder-coral) 100%);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

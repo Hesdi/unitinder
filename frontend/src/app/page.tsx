@@ -28,16 +28,20 @@ export default function Home() {
           Take a short quiz to build your learning profile, then see your
           best-matched teachers by subject.
         </p>
-        <div className="flex flex-col gap-4 sm:flex-row">
+        <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap">
           <Button
             asChild
             size="lg"
-            className="bg-[var(--gradient-coral)] text-white hover:opacity-90"
+            className="text-white hover:opacity-90"
+            style={{ background: "var(--tinder-gradient)" }}
           >
             <Link href="/quiz">Take the quiz</Link>
           </Button>
-          <Button asChild size="lg" variant="outline">
+          <Button asChild size="lg" variant="outline" className="border-[var(--tinder-pink)] text-[var(--tinder-pink)] hover:bg-[var(--tinder-pink)]/10">
             <Link href="/match">Match with teachers</Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="border-[var(--tinder-pink)] text-[var(--tinder-pink)] hover:bg-[var(--tinder-pink)]/10">
+            <Link href="/saved">My teachers</Link>
           </Button>
         </div>
         </main>
